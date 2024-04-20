@@ -14,12 +14,12 @@ from pearl.metrics import Accuracy, AccuracyAtNSec, EpisodeUniqueness, Normalize
 from pearl.model import NextGoalPredictor, CarballTransformer
 
 SIZES = {
-    "tiny": (128, 2, 4, 512),
-    "small": (256, 4, 8, 1024),
-    "medium": (512, 8, 12, 2048),
-    "base": (768, 12, 16, 3072),
+    "tiny": (128, 2, 2, 512),
+    "mini": (256, 4, 4, 1024),
+    "small": (512, 4, 8, 2048),
+    "medium": (512, 8, 8, 2048),
+    "base": (768, 12, 12, 3072),
     "large": (1024, 24, 16, 4096),
-    "xlarge": (2048, 24, 32, 8192)
 }
 
 
