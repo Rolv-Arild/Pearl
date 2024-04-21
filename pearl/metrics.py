@@ -127,14 +127,15 @@ class CalibrationScore(BaseMetric):
         y_pred = torch.sigmoid(y_pred)
         bin_edges = np.linspace(0, 1, self.bin_count + 1)
         for bin_start, bin_end in zip(bin_edges[:-1], bin_edges[1:]):
-            mask = (y_pred > bin_start) & (y_pred < bin_end)
+            mask = (y_pred >= bin_start) & (y_pred <= bin_end)
             preds = y_pred[mask]
             labels = y_true[mask]
-            expected = preds.mean()
-            actual = labels.mean()
-            error = (actual - expected) ** 2
-            self.total_error += len(labels) * error
-            self.total_samples += len(labels)
+            if len(labels) > 0:
+                expected = preds.mean().item()
+                actual = labels.mean().item()
+                error = (actual - expected) ** 2
+                self.total_error += len(labels) * error
+                self.total_samples += len(labels)
 
     def calculate(self):
         return self.total_error / self.total_samples
