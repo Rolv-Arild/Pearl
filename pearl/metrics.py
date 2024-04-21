@@ -116,24 +116,28 @@ class CalibrationScore(BaseMetric):
     def __init__(self, bin_count=10):
         super().__init__(f"calibration_score_{bin_count}_bins")
         self.bin_count = bin_count
-        self.bin_correct = np.zeros(self.bin_count)
-        self.bin_total = np.zeros(self.bin_count)
+        self.total_error = 0
+        self.total_samples = 0
 
     def reset(self):
-        self.bin_correct = np.zeros(self.bin_count)
-        self.bin_total = np.zeros(self.bin_count)
+        self.total_error = 0
+        self.total_samples = 0
 
     def submit(self, y_true, y_pred, episode_data: EpisodeData):
-        bin_edges = torch.linspace(0, 1, self.bin_count + 1).to(y_pred.device)
-        bin_indices = torch.bucketize(y_pred, bin_edges) - 1
-        for i in range(self.bin_count):
-            mask = bin_indices == i
-            self.bin_correct[i] += torch.sum((y_pred[mask] > 0) == y_true[mask]).item()
-            self.bin_total[i] += len(y_true[mask])
+        y_pred = torch.sigmoid(y_pred)
+        bin_edges = np.linspace(0, 1, self.bin_count + 1)
+        for bin_start, bin_end in zip(bin_edges[:-1], bin_edges[1:]):
+            mask = (y_pred > bin_start) & (y_pred < bin_end)
+            preds = y_pred[mask]
+            labels = y_true[mask]
+            expected = preds.mean()
+            actual = (labels > 0.5).mean()
+            error = (actual - expected) ** 2
+            self.total_error += len(labels) * error
+            self.total_samples += len(labels)
 
     def calculate(self):
-        bin_accuracy = self.bin_correct / self.bin_total
-        return np.mean(np.abs(bin_accuracy - np.linspace(0, 1, self.bin_count)))
+        return self.total_error / self.total_samples
 
 
 class Correlation(BaseMetric):

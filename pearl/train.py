@@ -118,15 +118,6 @@ class NGPTrainer:
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-    def ep_to_torch(self, ep: EpisodeData):
-        x = (
-            torch.from_numpy(ep.ball_data).float().to(self.device),
-            torch.from_numpy(ep.player_data).float().to(self.device),
-            torch.from_numpy(ep.boost_data).float().to(self.device),
-        )
-        y = torch.from_numpy((ep.next_goal_side + 1) / 2).float().to(self.device)
-        return x, y
-
     def validate(self):
         # For validation we calculate loss and metric across the whole split
         pbar = tqdm(self.val_files, desc="Validating")
@@ -149,7 +140,7 @@ class NGPTrainer:
 
                 for i in range(0, len(shard), self.batch_size):
                     batch = shard[i:i + self.batch_size]
-                    x, y = self.ep_to_torch(batch)
+                    x, y = batch.to_torch(self.device)
                     y_pred = self.model(*x)
                     loss = self.loss_fn(y_pred, y)
                     total_loss += loss.item() * len(batch)
@@ -202,7 +193,7 @@ class NGPTrainer:
 
                     for _ in range(self.gradient_accumulation_steps):
                         batch = shard[i:i + self.batch_size]
-                        x, y = self.ep_to_torch(batch)
+                        x, y = batch.to_torch(self.device)
                         self.optimizer.zero_grad()
                         y_pred = self.model(*x)
                         loss = self.loss_fn(y_pred, y) / self.gradient_accumulation_steps

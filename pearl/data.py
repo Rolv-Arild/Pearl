@@ -4,6 +4,7 @@ from typing import Tuple, Iterator, NamedTuple
 
 import numpy as np
 import pandas as pd
+import torch
 
 from pearl.replay import ParsedReplay
 
@@ -387,6 +388,15 @@ class EpisodeData:
             else:
                 self.boost_data[m, :] = 0
                 self.boost_data[m, :, BoostData.MASK.value] = 1
+
+    def to_torch(self, device=None):
+        x = (
+            torch.from_numpy(self.ball_data).float().to(device),
+            torch.from_numpy(self.player_data).float().to(device),
+            torch.from_numpy(self.boost_data).float().to(device),
+        )
+        y = torch.from_numpy((self.next_goal_side + 1) / 2).float().to(device)
+        return x, y
 
     def save(self, path):
         np.savez_compressed(path, ball_data=self.ball_data, player_data=self.player_data, boost_data=self.boost_data,
