@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from pearl.data import EpisodeData
 from pearl.metrics import Accuracy, AccuracyAtNSec, EpisodeUniqueness, NormalizedBrierScore, NoMaskMetric, \
-    CalibrationScore
+    CalibrationScore, PredictionVariance
 from pearl.model import NextGoalPredictor, CarballTransformer
 
 SIZES = {
@@ -67,6 +67,7 @@ class NGPTrainer:
                    # NormalizedBrierScore(),
                    EpisodeUniqueness(),
                    CalibrationScore(),
+                   PredictionVariance(),
                ] + ([
                         NoMaskMetric(Accuracy()),
                         NoMaskMetric(AccuracyAtNSec(1)),

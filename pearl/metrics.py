@@ -141,22 +141,26 @@ class CalibrationScore(BaseMetric):
         return self.total_error / self.total_samples
 
 
-class Correlation(BaseMetric):
+class PredictionVariance(BaseMetric):
     def __init__(self):
-        super().__init__("correlation")
-        self.y_true = np.array([])
-        self.y_pred = np.array([])
+        super().__init__("prediction_variance")
+        self.n = 0
+        self.sum = 0
+        self.sum_sq = 0
 
     def reset(self):
-        self.y_true = np.array([])
-        self.y_pred = np.array([])
+        self.n = 0
+        self.sum = 0
+        self.sum_sq = 0
 
     def submit(self, y_true, y_pred, episode_data: EpisodeData):
-        self.y_true = np.concatenate([self.y_true, y_true.cpu().numpy()])
-        self.y_pred = np.concatenate([self.y_pred, y_pred.cpu().numpy()])
+        self.n += len(y_pred)
+        self.sum += y_pred.sum().item()
+        self.sum_sq += (y_pred ** 2).sum().item()
 
     def calculate(self):
-        return np.corrcoef(self.y_true, self.y_pred)[0, 1]
+        var = (self.sum_sq - (self.sum * self.sum) / self.n) / (self.n - 1)
+        return var
 
 
 class NoMaskMetric(BaseMetric):
