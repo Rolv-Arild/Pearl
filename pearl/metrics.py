@@ -131,7 +131,7 @@ class CalibrationScore(BaseMetric):
             preds = y_pred[mask]
             labels = y_true[mask]
             expected = preds.mean()
-            actual = (labels > 0.5).mean()
+            actual = labels.mean()
             error = (actual - expected) ** 2
             self.total_error += len(labels) * error
             self.total_samples += len(labels)
