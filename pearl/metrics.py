@@ -4,6 +4,13 @@ import torch
 from pearl.data import EpisodeData, BallData, PlayerData, BoostData
 
 
+def _divide(a, b):
+    try:
+        return a / b
+    except ZeroDivisionError:
+        return float("nan")
+
+
 class BaseMetric:
     def __init__(self, name: str):
         self.name = name
@@ -36,7 +43,7 @@ class Accuracy(BaseMetric):
         self.total += len(y_true)
 
     def calculate(self):
-        return self.correct / self.total
+        return _divide(self.correct, self.total)
 
 
 class AccuracyAtNSec(BaseMetric):
@@ -58,7 +65,7 @@ class AccuracyAtNSec(BaseMetric):
         self.total += len(y_true)
 
     def calculate(self):
-        return self.correct / self.total
+        return _divide(self.correct, self.total)
 
 
 class EpisodeUniqueness(BaseMetric):
@@ -77,7 +84,7 @@ class EpisodeUniqueness(BaseMetric):
         self.total += len(episode_data.episode_id)
 
     def calculate(self):
-        return len(self.episode_ids) / self.total
+        return _divide(len(self.episode_ids), self.total)
 
 
 class NormalizedBrierScore(BaseMetric):
@@ -138,7 +145,7 @@ class CalibrationScore(BaseMetric):
                 self.total_samples += len(labels)
 
     def calculate(self):
-        return self.total_error / self.total_samples
+        return _divide(self.total_error, self.total_samples)
 
 
 class PredictionVariance(BaseMetric):
