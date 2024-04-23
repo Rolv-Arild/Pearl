@@ -359,7 +359,7 @@ class EpisodeData:
         self.time_until_end = self.time_until_end[idx]
         self.episode_id = self.episode_id[idx]
 
-    def mask_randomly(self, mode="uniform", remove_team_info=False, rng=None):
+    def mask_randomly(self, mode="uniform", remove_team_info=True, rng=None):
         if rng is None:
             rng = np.random
         entities = self.ball_data.shape[1] + self.player_data.shape[1] + 1
