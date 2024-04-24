@@ -1,3 +1,4 @@
+import itertools
 from dataclasses import dataclass
 from enum import Enum
 from typing import Tuple, Iterator, NamedTuple
@@ -359,10 +360,52 @@ class EpisodeData:
         self.time_until_end = self.time_until_end[idx]
         self.episode_id = self.episode_id[idx]
 
+    def mask_all_rows(self, ball_mask: list, player_mask: list, boost_mask: list):
+        # Each mask is a list of entities to mask
+        for i in ball_mask:
+            self.ball_data[:, i, :] = 0
+            self.ball_data[:, i, BallData.MASK.value] = 1
+        for i in player_mask:
+            self.player_data[:, i, :] = 0
+            self.player_data[:, i, PlayerData.MASK.value] = 1
+        for i in boost_mask:
+            self.boost_data[:, i, :] = 0
+            self.boost_data[:, i, BoostData.MASK.value] = 1
+
+    def mask_combinations(self, mask_ball=False, mask_players=True, mask_boost=False) -> Iterator["EpisodeData"]:
+        entities = (self.ball_data.shape[1] * mask_ball
+                    + self.player_data.shape[1] * mask_players
+                    + self.boost_data.shape[1] * mask_boost)
+        for comb in itertools.product([False, True], repeat=entities):
+            ball_mask = []
+            player_mask = []
+            boost_mask = []
+            masks = []
+            i = 0
+            if mask_ball:
+                for j in range(self.ball_data.shape[1]):
+                    if comb[i]:
+                        ball_mask.append(j)
+                    i += 1
+                masks.append(ball_mask)
+            if mask_players:
+                for j in range(self.player_data.shape[1]):
+                    if comb[i]:
+                        player_mask.append(j)
+                    i += 1
+                masks.append(player_mask)
+            if mask_boost:
+                for j in range(self.boost_data.shape[1]):
+                    if comb[i]:
+                        boost_mask.append(j)
+                    i += 1
+                masks.append(boost_mask)
+            yield masks, self.clone().mask_all_rows(ball_mask, player_mask, boost_mask)
+
     def mask_randomly(self, mode="uniform", remove_team_info=True, rng=None):
         if rng is None:
             rng = np.random
-        entities = self.ball_data.shape[1] + self.player_data.shape[1] + 1
+        entities = self.ball_data.shape[1] + self.player_data.shape[1] + self.boost_data.shape[1]
         if mode == "uniform":
             mask = rng.random(size=(len(self), entities)) < rng.random(size=(len(self), 1))
         elif mode == "binomial":
@@ -409,6 +452,18 @@ class EpisodeData:
         return EpisodeData(data["ball_data"], data["player_data"], data["boost_data"],
                            data["next_goal_side"], data["time_until_end"],
                            data["episode_id"], data["is_normalized"])
+
+    def clone(self):
+        return EpisodeData(
+            # game_info=self.game_info.copy(),
+            ball_data=self.ball_data.copy(),
+            player_data=self.player_data.copy(),
+            boost_data=self.boost_data.copy(),
+            next_goal_side=self.next_goal_side.copy(),
+            time_until_end=self.time_until_end.copy(),
+            episode_id=self.episode_id.copy(),
+            is_normalized=self.is_normalized
+        )
 
 
 def replay_to_data(replay: ParsedReplay, normalize: bool = True, ignore_unfinished: bool = True) \
