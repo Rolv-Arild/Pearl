@@ -97,6 +97,10 @@ class NGPTrainer:
                 "num_layers": num_layers,
                 "num_heads": num_heads,
                 "ff_dim": ff_dim,
+                "gradient_accumulation_steps": gradient_accumulation_steps,
+                "augment": augment,
+                "mask": mask,
+                "seed": seed,
             })
 
         files = [f for f in os.listdir(dataset_dir) if "shard" in f]

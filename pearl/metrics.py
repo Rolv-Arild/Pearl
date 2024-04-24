@@ -123,29 +123,35 @@ class CalibrationScore(BaseMetric):
     def __init__(self, bin_count=10):
         super().__init__(f"calibration_score_{bin_count}_bins")
         self.bin_count = bin_count
-        self.total_error = 0
-        self.total_samples = 0
+        self.total_preds = np.zeros(self.bin_count)
+        self.total_counts = np.zeros((self.bin_count, 2))
 
     def reset(self):
-        self.total_error = 0
-        self.total_samples = 0
+        self.total_preds = np.zeros(self.bin_count)
+        self.total_counts = np.zeros((self.bin_count, 2))
 
     def submit(self, y_true, y_pred, episode_data: EpisodeData):
         y_pred = torch.sigmoid(y_pred)
         bin_edges = np.linspace(0, 1, self.bin_count + 1)
+        i = 0
         for bin_start, bin_end in zip(bin_edges[:-1], bin_edges[1:]):
             mask = (y_pred >= bin_start) & (y_pred <= bin_end)
             preds = y_pred[mask]
             labels = y_true[mask]
             if len(labels) > 0:
-                expected = preds.mean().item()
-                actual = labels.mean().item()
-                error = (actual - expected) ** 2
-                self.total_error += len(labels) * error
-                self.total_samples += len(labels)
+                self.total_preds[i] += preds.sum().item()
+                self.total_counts[i] += [torch.sum(labels < 0.5).item(), torch.sum(labels > 0.5).item()]
+            i += 1
 
     def calculate(self):
-        return _divide(self.total_error, self.total_samples)
+        error = 0
+        for i in range(self.bin_count):
+            count = self.total_counts[i].sum()
+            if count > 0:
+                expected = self.total_preds[i] / count  # Average prediction in this bin
+                actual = self.total_counts[i][1] / count  # Fraction of positive labels
+                error += count * (expected - actual) ** 2
+        return _divide(error, self.total_counts.sum())
 
 
 class PredictionVariance(BaseMetric):
