@@ -17,20 +17,20 @@ def shapley_value(get_result_fn, player_pool):
     # Compute the result of all possible permutations of players so we can reuse them.
     results = {}
     for r in range(0, n + 1):
-        for perm in itertools.combinations(player_pool, r=r):
-            perm = tuple(sorted(perm))
-            if perm not in results:
-                results[perm] = get_result_fn(perm)
+        for comb in itertools.combinations(player_pool, r=r):
+            comb = tuple(sorted(comb))
+            if comb not in results:
+                results[comb] = get_result_fn(comb)
             else:
-                raise ValueError(f"Duplicate result for {perm}")  # Should only need to compute once
+                raise ValueError(f"Duplicate result for {comb}")  # Should only need to compute once
 
     for player in player_pool:
         pool_without_player = [p for p in player_pool if p != player]
         for r in range(0, len(pool_without_player) + 1):
-            for perm in itertools.combinations(pool_without_player, r=r):
-                perm_with_player = tuple(sorted(perm + (player,)))
-                weight = 1 / (n * math.comb(n - 1, len(perm)))
-                marginal_contribution = results[perm_with_player] - results[perm]
+            for comb in itertools.combinations(pool_without_player, r=r):
+                perm_with_player = tuple(sorted(comb + (player,)))
+                weight = 1 / (n * math.comb(n - 1, len(comb)))
+                marginal_contribution = results[perm_with_player] - results[comb]
                 shapley_values[player] += weight * marginal_contribution
 
     return shapley_values
