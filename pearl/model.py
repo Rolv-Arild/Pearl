@@ -3,7 +3,7 @@ import time
 import torch
 from torch import nn
 
-from data import BallData, PlayerData, BoostData
+from pearl.data import BallData, PlayerData, BoostData
 
 
 class CarballTransformer(nn.Module):

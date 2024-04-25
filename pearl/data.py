@@ -400,7 +400,9 @@ class EpisodeData:
                         boost_mask.append(j)
                     i += 1
                 masks.append(boost_mask)
-            yield masks, self.clone().mask_all_rows(ball_mask, player_mask, boost_mask)
+            ep = self.clone()
+            ep.mask_all_rows(ball_mask, player_mask, boost_mask)
+            yield masks, ep
 
     def mask_randomly(self, mode="uniform", remove_team_info=True, rng=None):
         if rng is None:
@@ -597,7 +599,6 @@ def replay_to_data(replay: ParsedReplay, normalize: bool = True, ignore_unfinish
         # Goal
         ball_y = replay.ball_df.loc[end_frame, "pos_y"]
         ep.next_goal_side[:] = np.sign(ball_y) * (goal_frame is not None)
-        assert np.all(ep.next_goal_side != 0)
         ep.time_until_end[:] = times.loc[end_frame] - times.loc[start_frame:end_frame]
 
         if normalize:
