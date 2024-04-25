@@ -38,6 +38,13 @@ def shapley_value(get_result_fn, player_pool):
 
 if __name__ == '__main__':
     n = 6
-    print(shapley_value(lambda x: len(x), list(range(n))))  # Should be all 1s
-    print(shapley_value(lambda x: sum(x), list(range(n))))  # Player n should have a Shapley value of n
+    # Should be all 1s
+    print(shapley_value(lambda x: len(x), list(range(n))))
+    # Player n should have a Shapley value of n
+    print(shapley_value(lambda x: sum(x), list(range(n))))
+    # Player 0 should have a large negative value, player 1 should have 0, and the rest should have positive values
+    print(shapley_value(lambda x: np.prod(x), list(range(n))))
+    # All should be negative, if there are an odd number of players, even numbers should have less negative values
+    print(shapley_value(lambda x: 1 if all([i % 2 == x[0] % 2 for i in x]) else 0, list(range(n))))
+    # We can also use numpy arrays for vectorized calculations
     print(shapley_value(lambda x: np.array([len(x), sum(x)]), list(range(n))))
