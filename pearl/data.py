@@ -360,19 +360,29 @@ class EpisodeData:
         self.time_until_end = self.time_until_end[idx]
         self.episode_id = self.episode_id[idx]
 
-    def mask_all_rows(self, ball_mask: list, player_mask: list, boost_mask: list):
+    def mask_all_rows(self, ball_mask: list, player_mask: list, boost_mask: list, use_ignore=False):
         # Each mask is a list of entities to mask
         for i in ball_mask:
             self.ball_data[:, i, :] = 0
-            self.ball_data[:, i, BallData.MASK.value] = 1
+            if use_ignore:
+                self.ball_data[:, i, BallData.IGNORE.value] = 1
+            else:
+                self.ball_data[:, i, BallData.MASK.value] = 1
         for i in player_mask:
             self.player_data[:, i, :] = 0
-            self.player_data[:, i, PlayerData.MASK.value] = 1
+            if use_ignore:
+                self.player_data[:, i, PlayerData.IGNORE.value] = 1
+            else:
+                self.player_data[:, i, PlayerData.MASK.value] = 1
         for i in boost_mask:
             self.boost_data[:, i, :] = 0
-            self.boost_data[:, i, BoostData.MASK.value] = 1
+            if use_ignore:
+                self.boost_data[:, i, BoostData.IGNORE.value] = 1
+            else:
+                self.boost_data[:, i, BoostData.MASK.value] = 1
 
-    def mask_combinations(self, mask_ball=False, mask_players=True, mask_boost=False) -> Iterator["EpisodeData"]:
+    def mask_combinations(self, mask_ball=False, mask_players=True, mask_boost=False, use_ignore=False) \
+            -> Iterator["EpisodeData"]:
         entities = (self.ball_data.shape[1] * mask_ball
                     + self.player_data.shape[1] * mask_players
                     + self.boost_data.shape[1] * mask_boost)
@@ -401,7 +411,7 @@ class EpisodeData:
                     i += 1
                 masks.append(boost_mask)
             ep = self.clone()
-            ep.mask_all_rows(ball_mask, player_mask, boost_mask)
+            ep.mask_all_rows(ball_mask, player_mask, boost_mask, use_ignore=use_ignore)
             yield masks, ep
 
     def mask_randomly(self, mode="uniform", remove_team_info=True, rng=None):

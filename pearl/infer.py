@@ -39,6 +39,9 @@ def main(args):
     model.to(device)
     batch_size = args.batch_size
 
+    if not os.path.exists(args.save_path):
+        os.makedirs(args.save_path)
+
     model.eval()
     with torch.no_grad(), tqdm(replay_paths) as pbar:
         for replay_path in pbar:
@@ -75,7 +78,7 @@ def main(args):
             m = 0
             for (start, end), episode in zip(starts_ends, data):
                 n = 0
-                for comb, masked in episode.mask_combinations(False, True, False):
+                for comb, masked in episode.mask_combinations(False, True, False, use_ignore=args.use_ignore):
                     masked_players = set(comb[0])
                     predictions = []
                     for i in range(0, len(masked), batch_size):
@@ -110,6 +113,7 @@ if __name__ == '__main__':
     parser.add_argument("--model_path", type=str, required=True)
     parser.add_argument("--save_path", type=str, required=True)
     parser.add_argument("--batch_size", type=int, required=True)
+    parser.add_argument("--use_ignore", action="store_true")
     parser.add_argument("--device", type=str, default=None)
     args = parser.parse_args()
     main(args)
