@@ -52,27 +52,28 @@ BIG_BOOST_RESPAWN_TIME = 10
 
 
 class PlayerData(Enum):
-    IGNORE = 0
-    MASK = 1
-    TEAM = 2
-    POS_X = 3
-    POS_Y = 4
-    POS_Z = 5
-    VEL_X = 6
-    VEL_Y = 7
-    VEL_Z = 8
-    FW_X = 9
-    FW_Y = 10
-    FW_Z = 11
-    UP_X = 12
-    UP_Y = 13
-    UP_Z = 14
-    ANG_VEL_X = 15
-    ANG_VEL_Y = 16
-    ANG_VEL_Z = 17
-    BOOST_AMOUNT = 18
-    IS_DEMOED = 19
-    RESPAWN_TIMER = 20
+    IGNORE = 0  # Whether to mask out this player with attention
+    MASK = 1  # Whether the data is masked out (e.g. everything else set to 0)
+    AGE = 2  # The time since this player was last updated
+    TEAM = 3  # -1 for blue, +1 for orange
+    POS_X = 4
+    POS_Y = 5
+    POS_Z = 6
+    VEL_X = 7
+    VEL_Y = 8
+    VEL_Z = 9
+    FW_X = 10
+    FW_Y = 11
+    FW_Z = 12
+    UP_X = 13
+    UP_Y = 14
+    UP_Z = 15
+    ANG_VEL_X = 16
+    ANG_VEL_Y = 17
+    ANG_VEL_Z = 18
+    BOOST_AMOUNT = 19
+    IS_DEMOED = 20
+    RESPAWN_TIMER = 21
     # TODO consider adding jump/dodge/handbrake info
 
 
@@ -328,11 +329,13 @@ class EpisodeData:
             idx = rng.random(len(self)) < 0.5
         self.ball_data[idx, :, BallData.POS_X.value] *= -1
         self.ball_data[idx, :, BallData.VEL_X.value] *= -1
-        self.ball_data[idx, :, BallData.ANG_VEL_X.value] *= -1
+        self.ball_data[idx, :, BallData.ANG_VEL_Y.value] *= -1
+        self.ball_data[idx, :, BallData.ANG_VEL_Z.value] *= -1
 
         self.player_data[idx, :, PlayerData.POS_X.value] *= -1
         self.player_data[idx, :, PlayerData.VEL_X.value] *= -1
-        self.player_data[idx, :, PlayerData.ANG_VEL_X.value] *= -1
+        self.player_data[idx, :, PlayerData.ANG_VEL_Z.value] *= -1
+        self.player_data[idx, :, PlayerData.ANG_VEL_Y.value] *= -1
         self.player_data[idx, :, PlayerData.FW_X.value] *= -1
         self.player_data[idx, :, PlayerData.UP_X.value] *= -1
 
@@ -530,6 +533,12 @@ def replay_to_data(replay: ParsedReplay, normalize: bool = True, ignore_unfinish
             uid_to_idx[uid] = i
 
             df = replay.player_dfs[uid].loc[start_frame:end_frame, :].copy()
+            updated = ((df[["pos_x", "pos_y", "pos_z"]].diff() != 0).any(axis=1)
+                       | (abs(df[["vel_x", "vel_y", "vel_z"]]) < 1).all(axis=1))
+            df["time"] = times.loc[df.index]
+            df.loc[~updated, :] = np.nan  # Set all columns to nan if not updated
+            df.loc[np.random.random(df.shape[0]) < 0.01, :] = np.nan  # Randomly set 1% of rows to nan
+
             for c in df.columns:
                 if "jump" in c or "dodge" in c or "flip" in c:
                     df[c] = df[c].fillna(0.)
@@ -541,7 +550,9 @@ def replay_to_data(replay: ParsedReplay, normalize: bool = True, ignore_unfinish
                     df[c] = df[c].astype(bool)  # Replace None values with False
             df = df.astype(float).ffill().fillna(0.)  # Demos create nan values, so we fill them with last known value
 
-            ep.player_data[:, :, PlayerData.IGNORE.value] = 0
+            # ep.player_data[:, :, PlayerData.IGNORE.value] = 0
+            # ep.player_data[:, :, PlayerData.MASK.value] = 0
+            ep.player_data[:, i, PlayerData.AGE.value] = times.loc[start_frame:end_frame] - df["time"]
             ep.player_data[:, i, PlayerData.TEAM.value] = 2 * player["is_orange"] - 1  # -1 for blue, 1 for orange
             ep.player_data[:, i, PlayerData.POS_X.value] = df["pos_x"].values
             ep.player_data[:, i, PlayerData.POS_Y.value] = df["pos_y"].values
