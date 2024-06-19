@@ -352,6 +352,15 @@ class EpisodeData:
             self.boost_data[idx, :, i] = self.boost_data[idx, :, ii]
             self.boost_data[idx, :, ii] = col1
 
+    def normalize_ball_quadrant(self):
+        # Normalize ball position to be in the positive x/y quadrant
+        # Swap teams first, since it will also change the x sign
+        neg_y = self.ball_data[:, :, BallData.POS_Y.value] < 0
+        self.swap_teams(neg_y)
+
+        neg_x = self.ball_data[:, :, BallData.POS_X.value] < 0
+        self.mirror_x(neg_x)
+
     def shuffle(self, rng=None):
         if rng is None:
             rng = np.random
