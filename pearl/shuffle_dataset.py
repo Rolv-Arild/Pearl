@@ -50,7 +50,7 @@ def main(args):
             while s < w:
                 a = s + t
                 b = a + w
-                pbar.set_postfix_str(f"Swapping {a} and {b}")
+                pbar.set_postfix_str(f"Swapping {a} and {b} (t={t}, s={s})")
                 shard_a = load_episode_data(os.path.join(output_dir, f"tmp_shard_{a}.npz"), shard_size)
                 shard_b = load_episode_data(os.path.join(output_dir, f"tmp_shard_{b}.npz"), shard_size)
                 total_shard = shard_a + shard_b
