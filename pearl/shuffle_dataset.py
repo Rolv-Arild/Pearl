@@ -38,7 +38,7 @@ def main(args):
     num_shards = len(train_files)
     w = 1
     lim = math.ceil(np.log2(num_shards))
-    swapped = [(n,) for n in range(lim)]
+    swapped = [(n,) for n in range(2 ** lim)]
     pbar = tqdm(list(range(lim)), "Shuffling shards")
     for p in pbar:
         # Note that we use ceil instead of floor, so we don't lose any data.
