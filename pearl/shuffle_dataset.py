@@ -45,7 +45,7 @@ def main(args):
         # Note that we use ceil instead of floor, so we don't lose any data.
         # This means we will encounter shards that don't exist, which we will fill with dummy data.
         # The dummy data is removed later on
-        with ProcessPoolExecutor() as ex:
+        with ProcessPoolExecutor(32) as ex:
             futures = []
             t = 0
             while t < num_shards:
@@ -67,8 +67,8 @@ def main(args):
 
                     s += 1
                 t += 2 * w
-            pbar.set_postfix_str(f"Waiting for {len(futures)} futures")
-            for future in futures:
+            for f, future in enumerate(futures):
+                pbar.set_postfix_str(f"Future progress: {f / len(futures):.1%}")
                 future.result()
         w *= 2
 
