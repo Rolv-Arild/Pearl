@@ -31,6 +31,7 @@ def main(args):
     # We use a butterfly shuffle, so the complexity is O(n * log(n))
 
     # Initialize the outputs as the original files
+    print("Copying files")
     for n, file in enumerate(train_files):
         shutil.copy(file, os.path.join(output_dir, f"tmp_shard_{n}.npz"))
 
@@ -72,7 +73,8 @@ def main(args):
     n = 0
     i = 0
     out_shard = EpisodeData.new_empty(shard_size, normalized=True)
-    for shard_file in os.listdir(output_dir):
+    pbar = tqdm(os.listdir(output_dir), "Removing dummy data")
+    for shard_file in pbar:
         if not shard_file.startswith("tmp_shard_"):
             continue
         shard = EpisodeData.load(os.path.join(output_dir, shard_file))
@@ -90,11 +92,13 @@ def main(args):
         out_shard.save(os.path.join(output_dir, f"training_shard_{n}.npz"))
 
     # Clean up any remaining intermediate files
+    print("Cleaning up")
     for shard_file in os.listdir(output_dir):
         if shard_file.startswith("tmp_shard_"):
             os.remove(os.path.join(output_dir, shard_file))
 
     # Copy validation files
+    print("Copying validation files")
     for n, file in enumerate(val_files):
         shutil.copy(file, os.path.join(output_dir, f"validation_shard_{n}.npz"))
 
