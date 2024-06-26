@@ -10,6 +10,8 @@ ENV = os.environ.copy()
 ENV["NO_COLOR"] = "1"
 
 
+# TODO remove file
+
 def process_replay(replay_path, output_folder, skip_existing=True):
     folder, fn = os.path.split(replay_path)
     replay_name = fn.replace(".replay", "")

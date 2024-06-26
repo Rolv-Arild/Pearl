@@ -8,7 +8,7 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 
-from pearl.data import replay_to_data
+from pearl.old_replay_to_data import replay_to_data
 from pearl.model import NextGoalPredictor, CarballTransformer
 from pearl.replay import ParsedReplay
 from pearl.shapley import shapley_value

@@ -6,6 +6,8 @@ from typing import Dict
 import pandas as pd
 
 
+# TODO remove file
+
 @dataclass
 class ParsedReplay:
     metadata: dict

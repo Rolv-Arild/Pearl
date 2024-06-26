@@ -1,134 +1,117 @@
+import enum
 import itertools
 from dataclasses import dataclass
-from enum import Enum
-from typing import Tuple, Iterator, NamedTuple
+from enum import IntEnum, auto
+from typing import Iterator
 
 import numpy as np
-import pandas as pd
 import torch
+from rlgym.rocket_league.common_values import BOOST_LOCATIONS, BIG_PAD_RECHARGE_SECONDS
 
-from pearl.replay import ParsedReplay
-
-BOOST_LOCATIONS = np.array([
-    (0.0, -4240.0, 70.0),
-    (-1792.0, -4184.0, 70.0),
-    (1792.0, -4184.0, 70.0),
-    (-3072.0, -4096.0, 73.0),
-    (3072.0, -4096.0, 73.0),
-    (- 940.0, -3308.0, 70.0),
-    (940.0, -3308.0, 70.0),
-    (0.0, -2816.0, 70.0),
-    (-3584.0, -2484.0, 70.0),
-    (3584.0, -2484.0, 70.0),
-    (-1788.0, -2300.0, 70.0),
-    (1788.0, -2300.0, 70.0),
-    (-2048.0, -1036.0, 70.0),
-    (0.0, -1024.0, 70.0),
-    (2048.0, -1036.0, 70.0),
-    (-3584.0, 0.0, 73.0),
-    (-1024.0, 0.0, 70.0),
-    (1024.0, 0.0, 70.0),
-    (3584.0, 0.0, 73.0),
-    (-2048.0, 1036.0, 70.0),
-    (0.0, 1024.0, 70.0),
-    (2048.0, 1036.0, 70.0),
-    (-1788.0, 2300.0, 70.0),
-    (1788.0, 2300.0, 70.0),
-    (-3584.0, 2484.0, 70.0),
-    (3584.0, 2484.0, 70.0),
-    (0.0, 2816.0, 70.0),
-    (- 940.0, 3308.0, 70.0),
-    (940.0, 3308.0, 70.0),
-    (-3072.0, 4096.0, 73.0),
-    (3072.0, 4096.0, 73.0),
-    (-1792.0, 4184.0, 70.0),
-    (1792.0, 4184.0, 70.0),
-    (0.0, 4240.0, 70.0),
-])
+BOOST_LOCATIONS = np.array(BOOST_LOCATIONS)
 
 DEMO_RESPAWN_TIME = 3
-SMALL_BOOST_RESPAWN_TIME = 4
-BIG_BOOST_RESPAWN_TIME = 10
+NO_TEAM = 2
 
 
-class PlayerData(Enum):
+@enum.unique
+class PlayerData(IntEnum):
     IGNORE = 0  # Whether to mask out this player with attention
-    MASK = 1  # Whether the data is masked out (e.g. everything else set to 0)
-    AGE = 2  # The time since this player was last updated
-    TEAM = 3  # -1 for blue, +1 for orange
-    POS_X = 4
-    POS_Y = 5
-    POS_Z = 6
-    VEL_X = 7
-    VEL_Y = 8
-    VEL_Z = 9
-    FW_X = 10
-    FW_Y = 11
-    FW_Z = 12
-    UP_X = 13
-    UP_Y = 14
-    UP_Z = 15
-    ANG_VEL_X = 16
-    ANG_VEL_Y = 17
-    ANG_VEL_Z = 18
-    BOOST_AMOUNT = 19
-    IS_DEMOED = 20
-    RESPAWN_TIMER = 21
-    # TODO consider adding jump/dodge/handbrake info
+    MASK = auto()  # Whether the data is masked out (e.g. everything else set to 0)
+    AGE = auto()  # The time since this player was last updated
+    TEAM = auto()  # -1 for blue, +1 for orange
+    POS_X = auto()
+    POS_Y = auto()
+    POS_Z = auto()
+    VEL_X = auto()
+    VEL_Y = auto()
+    VEL_Z = auto()
+    FW_X = auto()
+    FW_Y = auto()
+    FW_Z = auto()
+    UP_X = auto()
+    UP_Y = auto()
+    UP_Z = auto()
+    ANG_VEL_X = auto()
+    ANG_VEL_Y = auto()
+    ANG_VEL_Z = auto()
+    BOOST_AMOUNT = auto()
+    IS_DEMOED = auto()
+    RESPAWN_TIMER = auto()
+    # Now for a bunch of specific internal values, mostly handled by RocketSim
+    ON_GROUND = auto()
+    SUPERSONIC_TIME = auto()
+    BOOST_ACTIVE_TIME = auto()
+    HANDBRAKE = auto()
+    HAS_JUMPED = auto()
+    IS_HOLDING_JUMP = auto()
+    IS_JUMPING = auto()
+    JUMP_TIME = auto()
+    HAS_FLIPPED = auto()
+    HAS_DOUBLE_JUMPED = auto()
+    AIR_TIME_SINCE_JUMP = auto()
+    FLIP_TIME = auto()
+    FLIP_TORQUE_X = auto()
+    FLIP_TORQUE_Y = auto()
+    FLIP_TORQUE_Z = auto()
+    IS_AUTOFLIPPING = auto()
+    AUTOFLIP_TIMER = auto()
+    AUTOFLIP_DIRECTION = auto()
 
 
-class BallData(Enum):
+@enum.unique
+class BallData(IntEnum):
     IGNORE = 0
-    MASK = 1
-    POS_X = 2
-    POS_Y = 3
-    POS_Z = 4
-    VEL_X = 5
-    VEL_Y = 6
-    VEL_Z = 7
-    ANG_VEL_X = 8
-    ANG_VEL_Y = 9
-    ANG_VEL_Z = 10
+    MASK = auto()
+    POS_X = auto()
+    POS_Y = auto()
+    POS_Z = auto()
+    VEL_X = auto()
+    VEL_Y = auto()
+    VEL_Z = auto()
+    ANG_VEL_X = auto()
+    ANG_VEL_Y = auto()
+    ANG_VEL_Z = auto()
 
 
-class BoostData(Enum):
+@enum.unique
+class BoostData(IntEnum):
     IGNORE = 0
-    MASK = 1
-    TIMER_PAD_0 = 2
-    TIMER_PAD_1 = 3
-    TIMER_PAD_2 = 4
-    TIMER_PAD_3 = 5
-    TIMER_PAD_4 = 6
-    TIMER_PAD_5 = 7
-    TIMER_PAD_6 = 8
-    TIMER_PAD_7 = 9
-    TIMER_PAD_8 = 10
-    TIMER_PAD_9 = 11
-    TIMER_PAD_10 = 12
-    TIMER_PAD_11 = 13
-    TIMER_PAD_12 = 14
-    TIMER_PAD_13 = 15
-    TIMER_PAD_14 = 16
-    TIMER_PAD_15 = 17
-    TIMER_PAD_16 = 18
-    TIMER_PAD_17 = 19
-    TIMER_PAD_18 = 20
-    TIMER_PAD_19 = 21
-    TIMER_PAD_20 = 22
-    TIMER_PAD_21 = 23
-    TIMER_PAD_22 = 24
-    TIMER_PAD_23 = 25
-    TIMER_PAD_24 = 26
-    TIMER_PAD_25 = 27
-    TIMER_PAD_26 = 28
-    TIMER_PAD_27 = 29
-    TIMER_PAD_28 = 30
-    TIMER_PAD_29 = 31
-    TIMER_PAD_30 = 32
-    TIMER_PAD_31 = 33
-    TIMER_PAD_32 = 34
-    TIMER_PAD_33 = 35
-    TIMER_PAD_34 = 36
+    MASK = auto()
+    TIMER_PAD_0 = auto()
+    TIMER_PAD_1 = auto()
+    TIMER_PAD_2 = auto()
+    TIMER_PAD_3 = auto()
+    TIMER_PAD_4 = auto()
+    TIMER_PAD_5 = auto()
+    TIMER_PAD_6 = auto()
+    TIMER_PAD_7 = auto()
+    TIMER_PAD_8 = auto()
+    TIMER_PAD_9 = auto()
+    TIMER_PAD_10 = auto()
+    TIMER_PAD_11 = auto()
+    TIMER_PAD_12 = auto()
+    TIMER_PAD_13 = auto()
+    TIMER_PAD_14 = auto()
+    TIMER_PAD_15 = auto()
+    TIMER_PAD_16 = auto()
+    TIMER_PAD_17 = auto()
+    TIMER_PAD_18 = auto()
+    TIMER_PAD_19 = auto()
+    TIMER_PAD_20 = auto()
+    TIMER_PAD_21 = auto()
+    TIMER_PAD_22 = auto()
+    TIMER_PAD_23 = auto()
+    TIMER_PAD_24 = auto()
+    TIMER_PAD_25 = auto()
+    TIMER_PAD_26 = auto()
+    TIMER_PAD_27 = auto()
+    TIMER_PAD_28 = auto()
+    TIMER_PAD_29 = auto()
+    TIMER_PAD_30 = auto()
+    TIMER_PAD_31 = auto()
+    TIMER_PAD_32 = auto()
+    TIMER_PAD_33 = auto()
 
 
 # We're using a fixed number of boost timers for now, if we wanted to make this more general we could use:
@@ -140,204 +123,222 @@ class BoostData(Enum):
 #     RESPAWN_TIMER"""
 # )
 
-
-# TODO consider adding columns for game info (e.g. time, score)
-
-
-def quat_to_rot_mtx(quat: np.ndarray) -> np.ndarray:
-    w = -quat[0]
-    x = -quat[1]
-    y = -quat[2]
-    z = -quat[3]
-
-    theta = np.zeros((3, 3))
-
-    norm = np.dot(quat, quat)
-    if norm != 0:
-        s = 1.0 / norm
-
-        # front direction
-        theta[0, 0] = 1.0 - 2.0 * s * (y * y + z * z)
-        theta[1, 0] = 2.0 * s * (x * y + z * w)
-        theta[2, 0] = 2.0 * s * (x * z - y * w)
-
-        # left direction
-        theta[0, 1] = 2.0 * s * (x * y - z * w)
-        theta[1, 1] = 1.0 - 2.0 * s * (x * x + z * z)
-        theta[2, 1] = 2.0 * s * (y * z + x * w)
-
-        # up direction
-        theta[0, 2] = 2.0 * s * (x * z + y * w)
-        theta[1, 2] = 2.0 * s * (y * z - x * w)
-        theta[2, 2] = 1.0 - 2.0 * s * (x * x + y * y)
-
-    return theta
+@enum.unique
+class GameInfo(IntEnum):
+    IGNORE = 0
+    MASK = auto()
+    TIME_REMAINING = auto()
+    IS_OVERTIME = auto()
+    KICKOFF_TIMER = auto()
+    BLUE_SCORE = auto()
+    ORANGE_SCORE = auto()
 
 
-quat_to_rot_mtx = np.vectorize(quat_to_rot_mtx, signature="(4)->(3,3)")
-
-
-@dataclass
+@dataclass(slots=True)
 class EpisodeData:
-    # game_info: np.ndarray
-    ball_data: np.ndarray
-    player_data: np.ndarray
-    boost_data: np.ndarray
-    next_goal_side: np.ndarray
-    time_until_end: np.ndarray
-    episode_id: np.ndarray
-    is_normalized: bool = False
+    game_info: np.ndarray  # Info about general stuff about the game (e.g. scoreboard)
+    ball_data: np.ndarray  # Physics data for the ball
+    player_data: np.ndarray  # Physics data for all the player
+    boost_data: np.ndarray  # Boost timers
+    next_goal_side: np.ndarray  # Which team scores next in this episode (0 blue, 1 orange, 2 none)
+    match_win_side: np.ndarray  # Which team ultimately wins the match that this episode is in
+    time_until_end: np.ndarray  # Time until end of episode (e.g. goal scored or ball hitting ground on 0s)
+    episode_id: np.ndarray  # Distinct id for each episode
+    is_xy_flipped: np.ndarray  # Whether x/y is flipped (shape (n,2)) compared to the original data
+    is_normalized: bool = False  # Whether the data is normalized
 
     @staticmethod
     def new_empty(num_rows: int, num_balls=1, num_players=6, num_boosts=1, normalized=False):
         return EpisodeData(
-            # game_info=np.zeros((num_rows, len(GameInfo))),
-            ball_data=np.zeros((num_rows, num_balls, len(BallData))),
-            player_data=np.zeros((num_rows, num_players, len(PlayerData))),
-            boost_data=np.zeros((num_rows, num_boosts, len(BoostData))),
-            next_goal_side=np.zeros((num_rows,)),
-            time_until_end=np.zeros((num_rows,)),
-            episode_id=np.zeros((num_rows,)),
-            is_normalized=normalized
+            game_info=np.zeros((num_rows, len(GameInfo)), dtype=np.float32),
+            ball_data=np.zeros((num_rows, num_balls, len(BallData)), dtype=np.float32),
+            player_data=np.zeros((num_rows, num_players, len(PlayerData)), dtype=np.float32),
+            boost_data=np.zeros((num_rows, num_boosts, len(BoostData)), dtype=np.float32),
+            next_goal_side=np.zeros((num_rows,), dtype=np.int8),
+            match_win_side=np.zeros((num_rows,), dtype=np.int8),
+            time_until_end=np.zeros((num_rows,), dtype=np.float32),
+            episode_id=np.zeros((num_rows,), dtype=np.int32),
+            is_xy_flipped=np.zeros((num_rows, 2), dtype=bool),
+            is_normalized=normalized,
         )
 
     def __len__(self):
         return len(self.time_until_end)
 
+    def _get_attributes(self):
+        # Since lots of different functions perform the same operations on all the attributes
+        # I use getattr and setattr frequently, so I don't need to rewrite so much
+        return self.__slots__  # noqa
+
     def __getitem__(self, idx):
         if isinstance(idx, int):
             idx = slice(idx, idx + 1)
-        return EpisodeData(
-            # game_info=self.game_info[idx],
-            ball_data=self.ball_data[idx],
-            player_data=self.player_data[idx],
-            boost_data=self.boost_data[idx],
-            next_goal_side=self.next_goal_side[idx],
-            time_until_end=self.time_until_end[idx],
-            episode_id=self.episode_id[idx],
-            is_normalized=self.is_normalized
-        )
 
-    def __setslice__(self, i, j, sequence):
-        if sequence.is_normalized != self.is_normalized:
-            raise ValueError("Normalization mismatch")
-        self.ball_data[i:j] = sequence.ball_data
-        self.player_data[i:j] = sequence.player_data
-        self.boost_data[i:j] = sequence.boost_data
-        self.next_goal_side[i:j] = sequence.next_goal_side
-        self.time_until_end[i:j] = sequence.time_until_end
-        self.episode_id[i:j] = sequence.episode_id
+        kwargs = {}
+        for attr in self._get_attributes():
+            self_val = getattr(self, attr)
+            if isinstance(self_val, np.ndarray) and self_val.ndim > 0:
+                kwargs[attr] = self_val[idx]  # Note that this will produce a view
+            else:
+                kwargs[attr] = self_val
 
-    def __setitem__(self, idx, value):
+        return EpisodeData(**kwargs)
+
+    def __setslice__(self, i, j, sequence: "EpisodeData"):
+        self.__setitem__(slice(i, j), sequence)
+
+    def __setitem__(self, idx, value: "EpisodeData"):
         if isinstance(idx, int):
             idx = slice(idx, idx + 1)
         if value.is_normalized != self.is_normalized:
             raise ValueError("Normalization mismatch")
-        self.ball_data[idx] = value.ball_data
-        self.player_data[idx] = value.player_data
-        self.boost_data[idx] = value.boost_data
-        self.next_goal_side[idx] = value.next_goal_side
-        self.time_until_end[idx] = value.time_until_end
-        self.episode_id[idx] = value.episode_id
+        for attr in self._get_attributes():
+            self_val = getattr(self, attr)
+            if isinstance(self_val, np.ndarray) and self_val.ndim > 0:
+                other_val = getattr(value, attr)
+                self_val[idx] = other_val
 
     def __iter__(self):
         for i in range(len(self)):
             yield self[i]
 
-    def __add__(self, other):
-        if self.is_normalized and other.is_normalized:
-            is_normalized = True
-        elif self.is_normalized or other.is_normalized:
+    def __add__(self, other: "EpisodeData"):
+        if self.is_normalized != other.is_normalized:
             raise ValueError("Cannot add normalized and unnormalized data")
-        else:
-            is_normalized = False
-        return EpisodeData(
-            # game_info=np.concatenate((self.game_info, other.game_info)),
-            ball_data=np.concatenate((self.ball_data, other.ball_data)),
-            player_data=np.concatenate((self.player_data, other.player_data)),
-            boost_data=np.concatenate((self.boost_data, other.boost_data)),
-            next_goal_side=np.concatenate((self.next_goal_side, other.next_goal_side)),
-            time_until_end=np.concatenate((self.time_until_end, other.time_until_end)),
-            episode_id=np.concatenate((self.episode_id, other.episode_id + self.episode_id[-1] + 1)),
-            is_normalized=is_normalized
-        )
+        if len(other) == 0:
+            return self
+        if len(self) == 0:
+            return other
+
+        kwargs = {}
+        for attr in self._get_attributes():
+            self_val = getattr(self, attr)
+            if isinstance(self_val, np.ndarray) and self_val.ndim > 0:
+                other_val = getattr(other, attr)
+                if attr == "episode_id":
+                    kwargs[attr] = np.concatenate((self_val, other_val + self_val[-1] + 1))
+                else:
+                    kwargs[attr] = np.concatenate((self_val, other_val))
+            else:
+                kwargs[attr] = self_val
+
+        return EpisodeData(**kwargs)
 
     def normalize(self):
         if not self.is_normalized:
-            self.ball_data[:, :, BallData.POS_X.value] /= 4096.0
-            self.ball_data[:, :, BallData.POS_Y.value] /= 5120.0
-            self.ball_data[:, :, BallData.POS_Z.value] /= 2044.0
-            self.ball_data[:, :, BallData.VEL_X.value] /= 6000.0
-            self.ball_data[:, :, BallData.VEL_Y.value] /= 6000.0
-            self.ball_data[:, :, BallData.VEL_Z.value] /= 6000.0
-            self.ball_data[:, :, BallData.ANG_VEL_X.value] /= 6.0
-            self.ball_data[:, :, BallData.ANG_VEL_Y.value] /= 6.0
-            self.ball_data[:, :, BallData.ANG_VEL_Z.value] /= 6.0
+            self.game_info[:, GameInfo.TIME_REMAINING] = \
+                np.clip(self.game_info[:, GameInfo.TIME_REMAINING], 0, 5 * 60) / (5 * 60)
+            self.game_info[:, GameInfo.KICKOFF_TIMER] /= 5.0
+            self.game_info[:, GameInfo.BLUE_SCORE] /= 10.0  # Soft upper bound
+            self.game_info[:, GameInfo.ORANGE_SCORE] /= 10.0
+            # absmax = abs(self.game_info).max()
+            # if absmax > 1:
+            #     print(f"Non-normalized value in player data? "
+            #           f"Found value {absmax} at {np.where(abs(self.game_info) == absmax)}")
 
-            self.player_data[:, :, PlayerData.POS_X.value] /= 4096.0
-            self.player_data[:, :, PlayerData.POS_Y.value] /= 5120.0
-            self.player_data[:, :, PlayerData.POS_Z.value] /= 2044.0
-            self.player_data[:, :, PlayerData.VEL_X.value] /= 2300.0
-            self.player_data[:, :, PlayerData.VEL_Y.value] /= 2300.0
-            self.player_data[:, :, PlayerData.VEL_Z.value] /= 2300.0
-            self.player_data[:, :, PlayerData.ANG_VEL_X.value] /= 5.5
-            self.player_data[:, :, PlayerData.ANG_VEL_Y.value] /= 5.5
-            self.player_data[:, :, PlayerData.ANG_VEL_Z.value] /= 5.5
-            # Forward and up are pre-normalized
-            self.player_data[:, :, PlayerData.BOOST_AMOUNT.value] /= 100.0
-            self.player_data[:, :, PlayerData.RESPAWN_TIMER.value] /= DEMO_RESPAWN_TIME
+            self.ball_data[:, :, BallData.POS_X] /= 4096.0
+            self.ball_data[:, :, BallData.POS_Y] /= 6000.0
+            self.ball_data[:, :, BallData.POS_Z] /= 2044.0
+            self.ball_data[:, :, BallData.VEL_X] /= 6000.0
+            self.ball_data[:, :, BallData.VEL_Y] /= 6000.0
+            self.ball_data[:, :, BallData.VEL_Z] /= 6000.0
+            self.ball_data[:, :, BallData.ANG_VEL_X] /= 6.0
+            self.ball_data[:, :, BallData.ANG_VEL_Y] /= 6.0
+            self.ball_data[:, :, BallData.ANG_VEL_Z] /= 6.0
+            # absmax = abs(self.ball_data).max()
+            # if absmax > 1:
+            #     print(f"Non-normalized value in player data? "
+            #           f"Found value {absmax} at {np.where(abs(self.ball_data) == absmax)}")
 
-            self.boost_data[:, BoostData.TIMER_PAD_0.value:BoostData.TIMER_PAD_34.value + 1] /= BIG_BOOST_RESPAWN_TIME
+            self.player_data[:, :, PlayerData.POS_X] /= 4096.0
+            self.player_data[:, :, PlayerData.POS_Y] /= 6000.0
+            self.player_data[:, :, PlayerData.POS_Z] /= 2044.0
+            self.player_data[:, :, PlayerData.VEL_X] /= 2300.0
+            self.player_data[:, :, PlayerData.VEL_Y] /= 2300.0
+            self.player_data[:, :, PlayerData.VEL_Z] /= 2300.0
+            self.player_data[:, :, PlayerData.ANG_VEL_X] /= 5.5
+            self.player_data[:, :, PlayerData.ANG_VEL_Y] /= 5.5
+            self.player_data[:, :, PlayerData.ANG_VEL_Z] /= 5.5
+            # self.player_data[:, :, PlayerData.BOOST_AMOUNT] /= 1.0  # Boost amount is pre-normalized
+            self.player_data[:, :, PlayerData.RESPAWN_TIMER] /= DEMO_RESPAWN_TIME
+
+            self.player_data[:, :, PlayerData.SUPERSONIC_TIME] \
+                = np.clip(self.player_data[:, :, PlayerData.SUPERSONIC_TIME], 0, 1.0)
+            self.player_data[:, :, PlayerData.BOOST_ACTIVE_TIME] \
+                = np.clip(self.player_data[:, :, PlayerData.BOOST_ACTIVE_TIME], 0, 0.1) / 0.1
+            self.player_data[:, :, PlayerData.JUMP_TIME] /= 0.2
+            self.player_data[:, :, PlayerData.AIR_TIME_SINCE_JUMP] = \
+                np.clip(self.player_data[:, :, PlayerData.AIR_TIME_SINCE_JUMP], 0, 1.25) / 1.25
+            self.player_data[:, :, PlayerData.FLIP_TIME] \
+                = np.clip(self.player_data[:, :, PlayerData.FLIP_TIME], 0, 0.95) / 0.95
+            self.player_data[:, :, PlayerData.AUTOFLIP_TIMER] \
+                = np.clip(self.player_data[:, :, PlayerData.AUTOFLIP_TIMER], 0, 0.4) / 0.4
+            # absmax = abs(self.player_data).max()
+            # if absmax > 1:
+            #     print(f"Non-normalized value in player data? "
+            #           f"Found value {absmax} at {np.where(abs(self.player_data) == absmax)}")
+
+            self.boost_data[:, :, BoostData.TIMER_PAD_0:BoostData.TIMER_PAD_33 + 1] /= BIG_PAD_RECHARGE_SECONDS
+            # absmax = abs(self.boost_data).max()
+            # if absmax > 1:
+            #     print(f"Non-normalized value in player data? "
+            #           f"Found value {absmax} at {np.where(abs(self.boost_data) == absmax)}")
             self.is_normalized = True
 
     def swap_teams(self, idx=None, rng=None):
         if idx is None:
             idx = slice(None)
-        elif idx == "random":
+        elif isinstance(idx, str) and idx == "random":
             if rng is None:
                 rng = np.random
             idx = rng.random(len(self)) < 0.5
-        self.ball_data[idx, :, BallData.POS_X.value] *= -1
-        self.ball_data[idx, :, BallData.POS_Y.value] *= -1
-        self.ball_data[idx, :, BallData.VEL_X.value] *= -1
-        self.ball_data[idx, :, BallData.VEL_Y.value] *= -1
-        self.ball_data[idx, :, BallData.ANG_VEL_X.value] *= -1
-        self.ball_data[idx, :, BallData.ANG_VEL_Y.value] *= -1
+        blue_score = self.game_info[idx, GameInfo.BLUE_SCORE].copy()
+        self.game_info[idx, GameInfo.BLUE_SCORE] = self.game_info[idx, GameInfo.ORANGE_SCORE]
+        self.game_info[idx, GameInfo.ORANGE_SCORE] = blue_score
 
-        self.player_data[idx, :, PlayerData.TEAM.value] *= -1
-        self.player_data[idx, :, PlayerData.POS_X.value] *= -1
-        self.player_data[idx, :, PlayerData.POS_Y.value] *= -1
-        self.player_data[idx, :, PlayerData.VEL_X.value] *= -1
-        self.player_data[idx, :, PlayerData.VEL_Y.value] *= -1
-        self.player_data[idx, :, PlayerData.ANG_VEL_X.value] *= -1
-        self.player_data[idx, :, PlayerData.ANG_VEL_Y.value] *= -1
-        self.player_data[idx, :, PlayerData.FW_X.value] *= -1
-        self.player_data[idx, :, PlayerData.FW_Y.value] *= -1
-        self.player_data[idx, :, PlayerData.UP_X.value] *= -1
-        self.player_data[idx, :, PlayerData.UP_Y.value] *= -1
+        self.ball_data[idx, :, BallData.POS_X] *= -1
+        self.ball_data[idx, :, BallData.POS_Y] *= -1
+        self.ball_data[idx, :, BallData.VEL_X] *= -1
+        self.ball_data[idx, :, BallData.VEL_Y] *= -1
+        self.ball_data[idx, :, BallData.ANG_VEL_X] *= -1
+        self.ball_data[idx, :, BallData.ANG_VEL_Y] *= -1
+
+        self.player_data[idx, :, PlayerData.TEAM] *= -1
+        self.player_data[idx, :, PlayerData.POS_X] *= -1
+        self.player_data[idx, :, PlayerData.POS_Y] *= -1
+        self.player_data[idx, :, PlayerData.VEL_X] *= -1
+        self.player_data[idx, :, PlayerData.VEL_Y] *= -1
+        self.player_data[idx, :, PlayerData.ANG_VEL_X] *= -1
+        self.player_data[idx, :, PlayerData.ANG_VEL_Y] *= -1
+        self.player_data[idx, :, PlayerData.FW_X] *= -1
+        self.player_data[idx, :, PlayerData.FW_Y] *= -1
+        self.player_data[idx, :, PlayerData.UP_X] *= -1
+        self.player_data[idx, :, PlayerData.UP_Y] *= -1
 
         self.boost_data[idx, :, 2:] = self.boost_data[idx, :, :1:-1]
 
-        self.next_goal_side[idx] *= -1
+        self.next_goal_side[idx] = (1 - self.next_goal_side[idx]) % 3  # 0->1, 1->0, 2->2
+        self.is_xy_flipped[idx] = 1 - self.is_xy_flipped[idx]
 
     def mirror_x(self, idx=None, rng=None):
         if idx is None:
             idx = slice(None)
-        elif idx == "random":
+        elif isinstance(idx, str) and idx == "random":
             if rng is None:
                 rng = np.random
             idx = rng.random(len(self)) < 0.5
-        self.ball_data[idx, :, BallData.POS_X.value] *= -1
-        self.ball_data[idx, :, BallData.VEL_X.value] *= -1
-        self.ball_data[idx, :, BallData.ANG_VEL_Y.value] *= -1
-        self.ball_data[idx, :, BallData.ANG_VEL_Z.value] *= -1
+        self.ball_data[idx, :, BallData.POS_X] *= -1
+        self.ball_data[idx, :, BallData.VEL_X] *= -1
+        self.ball_data[idx, :, BallData.ANG_VEL_Y] *= -1
+        self.ball_data[idx, :, BallData.ANG_VEL_Z] *= -1
 
-        self.player_data[idx, :, PlayerData.POS_X.value] *= -1
-        self.player_data[idx, :, PlayerData.VEL_X.value] *= -1
-        self.player_data[idx, :, PlayerData.ANG_VEL_Z.value] *= -1
-        self.player_data[idx, :, PlayerData.ANG_VEL_Y.value] *= -1
-        self.player_data[idx, :, PlayerData.FW_X.value] *= -1
-        self.player_data[idx, :, PlayerData.UP_X.value] *= -1
+        self.player_data[idx, :, PlayerData.POS_X] *= -1
+        self.player_data[idx, :, PlayerData.VEL_X] *= -1
+        self.player_data[idx, :, PlayerData.ANG_VEL_Z] *= -1
+        self.player_data[idx, :, PlayerData.ANG_VEL_Y] *= -1
+        self.player_data[idx, :, PlayerData.FW_X] *= -1
+        self.player_data[idx, :, PlayerData.UP_X] *= -1
+        self.player_data[idx, :, PlayerData.FLIP_TORQUE_Y] *= -1  # Car-relative so y is left/right
 
         for i, loc in enumerate(BOOST_LOCATIONS):
             inv_loc = loc * np.array([-1, 1, 1])
@@ -352,58 +353,84 @@ class EpisodeData:
             self.boost_data[idx, :, i] = self.boost_data[idx, :, ii]
             self.boost_data[idx, :, ii] = col1
 
+        self.is_xy_flipped[idx, 0] = 1 - self.is_xy_flipped[idx, 0]
+
+    def mirror_y(self, idx=None, rng=None):
+        self.swap_teams(idx, rng)
+        self.mirror_x(idx, rng)
+
     def normalize_ball_quadrant(self):
         # Normalize ball position to be in the positive x/y quadrant
         # Swap teams first, since it will also change the x sign
-        neg_y = self.ball_data[:, :, BallData.POS_Y.value] < 0
-        self.swap_teams(neg_y)
+        # For balls on center lines, randomly swap teams
+        assert self.ball_data.shape[1] == 1, "Can only normalize ball quadrant when there is one ball"
+        neg_y = self.ball_data[:, 0, BallData.POS_Y] < 0
+        zero_y = self.ball_data[:, 0, BallData.POS_Y] == 0
+        rand = np.random.random(len(self)) < 0.5
+        idx = neg_y | (zero_y & rand)
+        self.swap_teams(idx)
 
-        neg_x = self.ball_data[:, :, BallData.POS_X.value] < 0
-        self.mirror_x(neg_x)
+        neg_x = self.ball_data[:, 0, BallData.POS_X] < 0
+        zero_x = self.ball_data[:, 0, BallData.POS_X] == 0
+        rand = np.random.random(len(self)) < 0.5
+        idx = neg_x | (zero_x & rand)
+        self.mirror_x(idx)
 
     def shuffle(self, rng=None):
         if rng is None:
             rng = np.random
         idx = rng.permutation(len(self))
-        self.ball_data = self.ball_data[idx]
-        self.player_data = self.player_data[idx]
-        self.boost_data = self.boost_data[idx]
-        self.next_goal_side = self.next_goal_side[idx]
-        self.time_until_end = self.time_until_end[idx]
-        self.episode_id = self.episode_id[idx]
 
-    def mask_all_rows(self, ball_mask: list, player_mask: list, boost_mask: list, use_ignore=False):
+        for attr in self._get_attributes():
+            val = getattr(self, attr)
+            if isinstance(val, np.ndarray) and val.ndim > 0:
+                setattr(self, attr, val[idx])
+
+    def mask_all_rows(self, game_info_mask: bool, ball_mask: list, player_mask: list, boost_mask: list,
+                      use_ignore=False):
+        if game_info_mask:
+            self.game_info[:] = 0
+            if use_ignore:
+                self.game_info[:, GameInfo.IGNORE] = 1
+            else:
+                self.game_info[:, GameInfo.MASK] = 1
         # Each mask is a list of entities to mask
         for i in ball_mask:
             self.ball_data[:, i, :] = 0
             if use_ignore:
-                self.ball_data[:, i, BallData.IGNORE.value] = 1
+                self.ball_data[:, i, BallData.IGNORE] = 1
             else:
-                self.ball_data[:, i, BallData.MASK.value] = 1
+                self.ball_data[:, i, BallData.MASK] = 1
         for i in player_mask:
             self.player_data[:, i, :] = 0
             if use_ignore:
-                self.player_data[:, i, PlayerData.IGNORE.value] = 1
+                self.player_data[:, i, PlayerData.IGNORE] = 1
             else:
-                self.player_data[:, i, PlayerData.MASK.value] = 1
+                self.player_data[:, i, PlayerData.MASK] = 1
         for i in boost_mask:
             self.boost_data[:, i, :] = 0
             if use_ignore:
-                self.boost_data[:, i, BoostData.IGNORE.value] = 1
+                self.boost_data[:, i, BoostData.IGNORE] = 1
             else:
-                self.boost_data[:, i, BoostData.MASK.value] = 1
+                self.boost_data[:, i, BoostData.MASK] = 1
 
-    def mask_combinations(self, mask_ball=False, mask_players=True, mask_boost=False, use_ignore=False) \
-            -> Iterator["EpisodeData"]:
-        entities = (self.ball_data.shape[1] * mask_ball
+    def mask_combinations(self, mask_game_info=False, mask_ball=False, mask_players=True, mask_boost=False,
+                          use_ignore=False) -> Iterator["EpisodeData"]:
+        entities = (1 * mask_game_info
+                    + self.ball_data.shape[1] * mask_ball
                     + self.player_data.shape[1] * mask_players
                     + self.boost_data.shape[1] * mask_boost)
         for comb in itertools.product([False, True], repeat=entities):
+            game_info_mask = False
             ball_mask = []
             player_mask = []
             boost_mask = []
             masks = []
             i = 0
+            if mask_game_info:
+                if comb[i]:
+                    game_info_mask = True
+                i += 1
             if mask_ball:
                 for j in range(self.ball_data.shape[1]):
                     if comb[i]:
@@ -423,7 +450,7 @@ class EpisodeData:
                     i += 1
                 masks.append(boost_mask)
             ep = self.clone()
-            ep.mask_all_rows(ball_mask, player_mask, boost_mask, use_ignore=use_ignore)
+            ep.mask_all_rows(game_info_mask, ball_mask, player_mask, boost_mask, use_ignore=use_ignore)
             yield masks, ep
 
     def mask_randomly(self, mode="uniform", remove_team_info=True, rng=None):
@@ -442,202 +469,54 @@ class EpisodeData:
             m = mask[:, i]
             if i < self.ball_data.shape[1]:
                 self.ball_data[m, i, :] = 0
-                self.ball_data[m, i, BallData.MASK.value] = 1
+                self.ball_data[m, i, BallData.MASK] = 1
             elif i < self.ball_data.shape[1] + self.player_data.shape[1]:
                 i -= self.ball_data.shape[1]
                 if remove_team_info:
                     self.player_data[m, i, :] = 0
                 else:
                     # Remove everything except team info
-                    self.player_data[m, i, :PlayerData.TEAM.value] = 0
-                    self.player_data[m, i, PlayerData.MASK.value + 1:] = 0
-                self.player_data[m, i, PlayerData.MASK.value] = 1
+                    self.player_data[m, i, :PlayerData.TEAM] = 0
+                    self.player_data[m, i, PlayerData.MASK:] = 0
+                self.player_data[m, i, PlayerData.MASK] = 1
             else:
                 self.boost_data[m, :] = 0
-                self.boost_data[m, :, BoostData.MASK.value] = 1
+                self.boost_data[m, :, BoostData.MASK] = 1
 
     def to_torch(self, device=None):
         x = (
+            torch.from_numpy(self.game_info).float().to(device),
             torch.from_numpy(self.ball_data).float().to(device),
             torch.from_numpy(self.player_data).float().to(device),
             torch.from_numpy(self.boost_data).float().to(device),
         )
-        y = torch.from_numpy((self.next_goal_side + 1) / 2).float().to(device)
+        y = (
+            torch.from_numpy(self.next_goal_side).long().to(device),
+            torch.from_numpy(self.match_win_side).long().to(device),
+        )
         return x, y
 
     def save(self, path):
-        np.savez_compressed(path, ball_data=self.ball_data, player_data=self.player_data, boost_data=self.boost_data,
-                            next_goal_side=self.next_goal_side, time_until_end=self.time_until_end,
-                            episode_id=self.episode_id, is_normalized=self.is_normalized)
+        kwargs = {
+            attr: getattr(self, attr)
+            for attr in self._get_attributes()
+        }
+        np.savez_compressed(path, **kwargs)
 
     @staticmethod
     def load(path):
         data = np.load(path)
-        return EpisodeData(data["ball_data"], data["player_data"], data["boost_data"],
-                           data["next_goal_side"], data["time_until_end"],
-                           data["episode_id"], data["is_normalized"])
+        return EpisodeData(**data)
 
     def clone(self):
-        return EpisodeData(
-            # game_info=self.game_info.copy(),
-            ball_data=self.ball_data.copy(),
-            player_data=self.player_data.copy(),
-            boost_data=self.boost_data.copy(),
-            next_goal_side=self.next_goal_side.copy(),
-            time_until_end=self.time_until_end.copy(),
-            episode_id=self.episode_id.copy(),
-            is_normalized=self.is_normalized
-        )
+        kwargs = {}
+        for attr in self._get_attributes():
+            self_val = getattr(self, attr)
+            if isinstance(self_val, np.ndarray):
+                kwargs[attr] = self_val.copy()
+            elif isinstance(self_val, (str, int, bool, float, tuple)):
+                kwargs[attr] = self_val
+            else:
+                raise ValueError(f"Not sure how to copy type {type(self_val)}")
 
-
-def replay_to_data(replay: ParsedReplay, normalize: bool = True, ignore_unfinished: bool = True) \
-        -> Iterator[EpisodeData]:
-    """
-    Convert a replay to a sequence of training data.
-
-    :param replay: the replay to convert.
-    :param normalize: whether to normalize the data.
-    :param ignore_unfinished: whether to ignore gameplay periods with no goal scored.
-    :return: a sequence of training data.
-             Each element is a tuple of (x, y) where x is a tuple of
-             (balls, players, boosts) and y is a tuple of (next_goal_side, time_until_end).
-    """
-    players = [p for p in replay.metadata["players"]
-               if p["unique_id"] in replay.player_dfs]
-
-    times = replay.game_df["time"]
-
-    gameplay_periods = replay.analyzer["gameplay_periods"]
-    for gameplay_period in gameplay_periods:
-        start_frame = gameplay_period["start_frame"]
-        goal_frame = gameplay_period["goal_frame"]
-
-        if goal_frame is None:
-            end_frame = gameplay_period["end_frame"]
-            if ignore_unfinished:
-                continue
-        else:
-            end_frame = goal_frame
-
-        size = end_frame - start_frame + 1  # loc is inclusive
-        ep = EpisodeData.new_empty(size)
-
-        # Ball data
-        df = replay.ball_df.loc[start_frame:end_frame, :].fillna(0.)
-        ep.ball_data[:, 0, BallData.POS_X.value] = df["pos_x"].values
-        ep.ball_data[:, 0, BallData.POS_Y.value] = df["pos_y"].values
-        ep.ball_data[:, 0, BallData.POS_Z.value] = df["pos_z"].values
-        ep.ball_data[:, 0, BallData.VEL_X.value] = df["vel_x"].values
-        ep.ball_data[:, 0, BallData.VEL_Y.value] = df["vel_y"].values
-        ep.ball_data[:, 0, BallData.VEL_Z.value] = df["vel_z"].values
-        ep.ball_data[:, 0, BallData.ANG_VEL_X.value] = df["ang_vel_x"].values
-        ep.ball_data[:, 0, BallData.ANG_VEL_Y.value] = df["ang_vel_y"].values
-        ep.ball_data[:, 0, BallData.ANG_VEL_Z.value] = df["ang_vel_z"].values
-
-        # Player data
-        ep.player_data[:, :, PlayerData.IGNORE.value] = 1
-        uid_to_idx = {}
-        for i, player in enumerate(players):
-            uid = player["unique_id"]
-            uid_to_idx[uid] = i
-
-            df = replay.player_dfs[uid].loc[start_frame:end_frame, :].copy()
-            updated = ((df[["pos_x", "pos_y", "pos_z"]].diff() != 0).any(axis=1)
-                       | (abs(df[["vel_x", "vel_y", "vel_z"]]) < 1).all(axis=1))
-            df["time"] = times.loc[df.index]
-            df.loc[~updated, :] = np.nan  # Set all columns to nan if not updated
-            df.loc[np.random.random(df.shape[0]) < 0.01, :] = np.nan  # Randomly set 1% of rows to nan
-
-            for c in df.columns:
-                if "jump" in c or "dodge" in c or "flip" in c:
-                    df[c] = df[c].fillna(0.)
-                elif c.startswith("match_"):  # Goals, assists, saves
-                    df[c] = df[c].fillna(0)
-                elif c in ("boost_pickup", "boost_amount"):
-                    df[c] = df[c].fillna(0)
-                elif c in ("handbrake",):
-                    df[c] = df[c].astype(bool)  # Replace None values with False
-            df = df.astype(float).ffill().fillna(0.)  # Demos create nan values, so we fill them with last known value
-
-            # ep.player_data[:, :, PlayerData.IGNORE.value] = 0
-            # ep.player_data[:, :, PlayerData.MASK.value] = 0
-            ep.player_data[:, i, PlayerData.AGE.value] = times.loc[start_frame:end_frame] - df["time"]
-            ep.player_data[:, i, PlayerData.TEAM.value] = 2 * player["is_orange"] - 1  # -1 for blue, 1 for orange
-            ep.player_data[:, i, PlayerData.POS_X.value] = df["pos_x"].values
-            ep.player_data[:, i, PlayerData.POS_Y.value] = df["pos_y"].values
-            ep.player_data[:, i, PlayerData.POS_Z.value] = df["pos_z"].values
-            ep.player_data[:, i, PlayerData.VEL_X.value] = df["vel_x"].values
-            ep.player_data[:, i, PlayerData.VEL_Y.value] = df["vel_y"].values
-            ep.player_data[:, i, PlayerData.VEL_Z.value] = df["vel_z"].values
-            quat = df[["quat_w", "quat_x", "quat_y", "quat_z"]].values
-            rot_mtx = quat_to_rot_mtx(quat)
-            ep.player_data[:, i, PlayerData.FW_X.value] = rot_mtx[:, 0, 0]
-            ep.player_data[:, i, PlayerData.FW_Y.value] = rot_mtx[:, 0, 1]
-            ep.player_data[:, i, PlayerData.FW_Z.value] = rot_mtx[:, 0, 2]
-            ep.player_data[:, i, PlayerData.UP_X.value] = rot_mtx[:, 2, 0]
-            ep.player_data[:, i, PlayerData.UP_Y.value] = rot_mtx[:, 2, 1]
-            ep.player_data[:, i, PlayerData.UP_Z.value] = rot_mtx[:, 2, 2]
-            ep.player_data[:, i, PlayerData.ANG_VEL_X.value] = df["ang_vel_x"].values
-            ep.player_data[:, i, PlayerData.ANG_VEL_Y.value] = df["ang_vel_y"].values
-            ep.player_data[:, i, PlayerData.ANG_VEL_Z.value] = df["ang_vel_z"].values
-            ep.player_data[:, i, PlayerData.BOOST_AMOUNT.value] = df["boost_amount"].values
-
-            # Boost data
-            boost_pickups = df["boost_pickup"]
-            for pickup_frame in boost_pickups[boost_pickups > 0].index:
-                pos = df.loc[pickup_frame, ["pos_x", "pos_y", "pos_z"]].values
-                closest_boost = np.linalg.norm((BOOST_LOCATIONS - pos).astype(float), axis=1).argmin()
-                pickup_time = times.loc[pickup_frame]
-                if BOOST_LOCATIONS[closest_boost][2] > 71.5:
-                    respawn_time = pickup_time + BIG_BOOST_RESPAWN_TIME
-                else:
-                    respawn_time = pickup_time + SMALL_BOOST_RESPAWN_TIME
-
-                respawn_frame = next(iter(times[times > respawn_time].index), float("inf"))
-                respawn_frame = min(respawn_frame - 1, end_frame)
-
-                start_idx = pickup_frame - start_frame
-                end_idx = respawn_frame - start_frame + 1
-                assert start_idx < end_idx
-
-                timer = respawn_time - times.loc[pickup_frame:respawn_frame]
-                assert (timer >= 0).all()
-                ep.boost_data[start_idx:end_idx, 0, BoostData.TIMER_PAD_0.value + closest_boost] = timer
-
-        # Demos
-        for demo in replay.metadata["demos"]:
-            demo_frame = demo["frame_number"]
-            if demo_frame < start_frame or demo_frame > end_frame:
-                continue  # Not in this gameplay segment
-            victim_uid = demo["victim_unique_id"]
-            idx = uid_to_idx[victim_uid]
-            demo_time = times.loc[demo_frame]
-            respawn_time = demo_time + DEMO_RESPAWN_TIME
-
-            respawn_frame = next(iter(times[times > respawn_time].index), float("inf"))
-            respawn_frame = min(respawn_frame - 1, end_frame)
-
-            start_idx = demo_frame - start_frame
-            end_idx = respawn_frame - start_frame + 1
-            assert start_idx < end_idx
-
-            timer = respawn_time - times.loc[demo_frame:respawn_frame].values
-            assert (timer >= 0).all()
-            ep.player_data[start_idx:end_idx, idx, PlayerData.IS_DEMOED.value] = 1
-            ep.player_data[start_idx:end_idx, idx, PlayerData.RESPAWN_TIMER.value] = timer
-
-        # Goal
-        ball_y = replay.ball_df.loc[end_frame, "pos_y"]
-        ep.next_goal_side[:] = np.sign(ball_y) * (goal_frame is not None)
-        ep.time_until_end[:] = times.loc[end_frame] - times.loc[start_frame:end_frame]
-
-        if normalize:
-            ep.normalize()
-
-        yield ep
-
-
-if __name__ == '__main__':
-    replay = ParsedReplay.load("./test_replays/00029e4d-242d-49ed-971d-1218daa2eefa")
-    for ep in replay_to_data(replay):
-        debug = True
+        return EpisodeData(**kwargs)

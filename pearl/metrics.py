@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from pearl.data import EpisodeData, BallData, PlayerData, BoostData
+from pearl.data import EpisodeData, BallData, PlayerData, BoostData, GameInfo
 
 
 def _divide(a, b):
@@ -18,7 +18,7 @@ class BaseMetric:
     def reset(self):
         raise NotImplementedError
 
-    def submit(self, y_true, y_pred, episode_data: EpisodeData):
+    def submit(self, y_true: torch.Tensor, y_pred: torch.Tensor, episode_data: EpisodeData):
         raise NotImplementedError
 
     def calculate(self):
@@ -38,8 +38,11 @@ class Accuracy(BaseMetric):
         self.correct = 0
         self.total = 0
 
-    def submit(self, y_true, y_pred, episode_data: EpisodeData):
-        self.correct += torch.sum((y_pred > 0) == y_true).item()
+    def submit(self, y_true: torch.Tensor, y_pred: torch.Tensor, episode_data: EpisodeData):
+        mask = y_true != -100
+        y_true = y_true[mask]
+        y_pred = y_pred[mask]
+        self.correct += torch.sum(y_pred.argmax(dim=-1) == y_true).item()
         self.total += len(y_true)
 
     def calculate(self):
@@ -57,11 +60,14 @@ class AccuracyAtNSec(BaseMetric):
         self.correct = 0
         self.total = 0
 
-    def submit(self, y_true, y_pred, episode_data: EpisodeData):
-        mask = episode_data.time_until_end <= self.n_sec
+    def submit(self, y_true: torch.Tensor, y_pred: torch.Tensor, episode_data: EpisodeData):
+        mask = abs(episode_data.time_until_end - self.n_sec) < 0.5  # This one is numpy
         y_true = y_true[mask]
         y_pred = y_pred[mask]
-        self.correct += torch.sum((y_pred > 0) == y_true).item()
+        mask = ((y_true == 0) | (y_true == 1))  # While these are torch
+        y_true = y_true[mask]
+        y_pred = y_pred[mask]
+        self.correct += torch.sum(y_pred.argmax(dim=-1) == y_true).item()
         self.total += len(y_true)
 
     def calculate(self):
@@ -78,7 +84,7 @@ class EpisodeUniqueness(BaseMetric):
         self.episode_ids = np.array([])
         self.total = 0
 
-    def submit(self, y_true, y_pred, episode_data: EpisodeData):
+    def submit(self, y_true: torch.Tensor, y_pred: torch.Tensor, episode_data: EpisodeData):
         diff = np.setdiff1d(episode_data.episode_id, self.episode_ids)
         self.episode_ids = np.concatenate([self.episode_ids, diff])
         self.total += len(episode_data.episode_id)
@@ -103,7 +109,10 @@ class NormalizedBrierScore(BaseMetric):
         self.max_brier_score = 0
         self.min_brier_score = 0
 
-    def submit(self, y_true, y_pred, episode_data: EpisodeData):
+    def submit(self, y_true: torch.Tensor, y_pred: torch.Tensor, episode_data: EpisodeData):
+        mask = (y_true == 0) | (y_true == 1)
+        y_true = y_true[mask]
+        y_pred = torch.softmax(y_pred[mask], dim=1)[:, 1]
         self.brier_score += torch.sum((y_pred - y_true) ** 2).item()
         self.total += len(y_true)
 
@@ -130,12 +139,13 @@ class CalibrationScore(BaseMetric):
         self.total_preds = np.zeros(self.bin_count)
         self.total_counts = np.zeros((self.bin_count, 2))
 
-    def submit(self, y_true, y_pred, episode_data: EpisodeData):
-        y_pred = torch.sigmoid(y_pred)
+    def submit(self, y_true: torch.Tensor, y_pred: torch.Tensor, episode_data: EpisodeData):
+        has_goal = (y_true == 0) | (y_true == 1)
+        y_pred = torch.softmax(y_pred, dim=1)[:, 1]
         bin_edges = np.linspace(0, 1, self.bin_count + 1)
         i = 0
         for bin_start, bin_end in zip(bin_edges[:-1], bin_edges[1:]):
-            mask = (y_pred >= bin_start) & (y_pred <= bin_end)
+            mask = (y_pred >= bin_start) & (y_pred <= bin_end) & has_goal
             preds = y_pred[mask]
             labels = y_true[mask]
             if len(labels) > 0:
@@ -166,7 +176,8 @@ class PredictionVariance(BaseMetric):
         self.sum = 0
         self.sum_sq = 0
 
-    def submit(self, y_true, y_pred, episode_data: EpisodeData):
+    def submit(self, y_true: torch.Tensor, y_pred: torch.Tensor, episode_data: EpisodeData):
+        y_pred = y_pred[:, 1] - y_pred[:, 0]
         self.n += len(y_pred)
         self.sum += y_pred.sum().item()
         self.sum_sq += (y_pred ** 2).sum().item()
@@ -184,11 +195,12 @@ class NoMaskMetric(BaseMetric):
     def reset(self):
         self.metric.reset()
 
-    def submit(self, y_true, y_pred, episode_data: EpisodeData):
+    def submit(self, y_true: torch.Tensor, y_pred: torch.Tensor, episode_data: EpisodeData):
         masked = np.concatenate([
-            episode_data.ball_data[:, :, BallData.MASK.value],
-            episode_data.player_data[:, :, PlayerData.MASK.value],
-            episode_data.boost_data[:, :, BoostData.MASK.value],
+            episode_data.game_info[:, GameInfo.MASK].reshape(-1, 1),
+            episode_data.ball_data[:, :, BallData.MASK],
+            episode_data.player_data[:, :, PlayerData.MASK],
+            episode_data.boost_data[:, :, BoostData.MASK],
         ], axis=1).any(axis=1)
         y_true = y_true[~masked]
         y_pred = y_pred[~masked]

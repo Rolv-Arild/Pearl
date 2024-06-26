@@ -4,12 +4,12 @@ import os
 import numpy as np
 import torch
 import wandb
-from torch.nn import BCEWithLogitsLoss
+from torch.nn import CrossEntropyLoss
 from torch.optim import AdamW
 from tqdm import tqdm
 
-from pearl.data import EpisodeData
-from pearl.metrics import Accuracy, AccuracyAtNSec, EpisodeUniqueness, NormalizedBrierScore, NoMaskMetric, \
+from pearl.data import EpisodeData, NO_TEAM
+from pearl.metrics import Accuracy, AccuracyAtNSec, EpisodeUniqueness, NoMaskMetric, \
     CalibrationScore, PredictionVariance
 from pearl.model import NextGoalPredictor, CarballTransformer
 
@@ -24,8 +24,9 @@ SIZES = {
 
 
 class NGPTrainer:
-    def __init__(self, name, dataset_dir: str, save_path: str, batch_size: int, learning_rate: float,
-                 size: str, gradient_accumulation_steps: int = 1,
+    def __init__(self, name, dataset_dir: str, save_path: str, batch_size: int, learning_rate: float, size: str,
+                 include_scoreboard: bool, include_ties: bool, predict_win: bool,
+                 gradient_accumulation_steps: int = 1,
                  augment=True, mask=None, device=None, validate_every=1000,
                  seed=123):
         self.dataset_dir = dataset_dir
@@ -37,6 +38,13 @@ class NGPTrainer:
             dim, num_layers, num_heads, ff_dim = SIZES[size]
         else:
             dim, num_layers, num_heads, ff_dim = (int(v) for v in size.split(","))
+
+        assert predict_win or not include_scoreboard, "Can't predict win without scoreboard"
+        assert include_ties or not include_scoreboard, "Can't include ties without scoreboard"
+
+        self.include_scoreboard = include_scoreboard
+        self.include_ties = include_ties
+        self.predict_win = predict_win
 
         self.gradient_accumulation_steps = gradient_accumulation_steps
         self.augment = augment
@@ -53,10 +61,11 @@ class NGPTrainer:
                 num_layers=num_layers,
                 num_heads=num_heads,
                 ff_dim=ff_dim,
+                include_game_info=include_scoreboard
             ),
         ).to(self.device)
         self.optimizer = AdamW(self.model.parameters(), lr=learning_rate)
-        self.loss_fn = BCEWithLogitsLoss()
+        self.loss_fn = CrossEntropyLoss()
         self.metrics = {
             k: [
                    Accuracy(),
@@ -81,8 +90,11 @@ class NGPTrainer:
         }
         if name is None:
             n = 1
+            prefix = "nwp" if predict_win else "ngp"
+            if include_ties:
+                prefix += "t"
             while True:
-                name = f"ngp-{size}-{n}"
+                name = f"{prefix}-{size}-{n}"
                 if name not in os.listdir(save_path):
                     break
                 n += 1
@@ -101,6 +113,9 @@ class NGPTrainer:
                 "augment": augment,
                 "mask": mask,
                 "seed": seed,
+                "include_scoreboard": include_scoreboard,
+                "include_ties": include_ties,
+                "predict_win": predict_win,
             })
 
         files = [f for f in os.listdir(dataset_dir) if "shard" in f]
@@ -124,7 +139,7 @@ class NGPTrainer:
         torch.backends.cudnn.benchmark = False
 
     def validate(self):
-        # For validation we calculate loss and metric across the whole split
+        # For validation, we calculate loss and metric across the whole split
         pbar = tqdm(self.val_files, desc="Validating")
         val_metrics = self.metrics["val"]
         for metric in val_metrics:
@@ -146,6 +161,9 @@ class NGPTrainer:
                 for i in range(0, len(shard), self.batch_size):
                     batch = shard[i:i + self.batch_size]
                     x, y = batch.to_torch(self.device)
+                    y = y[int(self.predict_win)]
+                    if not self.include_ties:
+                        y[y == NO_TEAM] = -100
                     y_pred = self.model(*x)
                     loss = self.loss_fn(y_pred, y)
                     total_loss += loss.item() * len(batch)
@@ -174,7 +192,7 @@ class NGPTrainer:
         print(f"{self.n_updates}\n\tValidation loss: {avg_loss:.4f}\n\t{metrics}")
 
     def train(self):
-        # For training we calculate loss and metric per batch
+        # For training, we calculate loss and metric per batch
         pbar = tqdm(desc="Training", total=self.validate_every)
         train_metrics = self.metrics["train"]
         while True:
@@ -200,6 +218,9 @@ class NGPTrainer:
                     for _ in range(self.gradient_accumulation_steps):
                         batch = shard[i:i + self.batch_size]
                         x, y = batch.to_torch(self.device)
+                        y = y[int(self.predict_win)]
+                        if not self.include_ties:
+                            y[y == NO_TEAM] = -100
                         self.optimizer.zero_grad()
                         y_pred = self.model(*x)
                         loss = self.loss_fn(y_pred, y) / self.gradient_accumulation_steps
@@ -244,6 +265,9 @@ def main(args):
         batch_size=args.batch_size,
         learning_rate=args.learning_rate,
         size=args.size,
+        include_scoreboard=args.include_scoreboard,
+        include_ties=args.include_ties,
+        predict_win=args.predict_win,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         augment=not args.no_augment,
         mask=args.mask,
@@ -259,7 +283,10 @@ if __name__ == "__main__":
     parser.add_argument("--save_path", type=str, required=True)
     parser.add_argument("--batch_size", type=int, required=True)
     parser.add_argument("--learning_rate", type=float, required=True)
-    parser.add_argument("--size", type=str, default="small")
+    parser.add_argument("--size", type=str, required=True)
+    parser.add_argument("--include_scoreboard", action="store_true")
+    parser.add_argument("--include_ties", action="store_true")
+    parser.add_argument("--predict_win", action="store_true")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1)
     parser.add_argument("--no_augment", action="store_true")
     parser.add_argument("--mask", type=str, default=None)

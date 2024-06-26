@@ -3,11 +3,12 @@ import time
 import torch
 from torch import nn
 
-from pearl.data import BallData, PlayerData, BoostData
+from pearl.data import BallData, PlayerData, BoostData, GameInfo
 
 
 class CarballTransformer(nn.Module):
-    def __init__(self, dim: int, num_layers: int, num_heads=None, ff_dim=None, activation_fn=nn.GELU):
+    def __init__(self, *, dim: int, num_layers: int, num_heads=None, ff_dim=None, activation_fn=nn.GELU,
+                 include_game_info=False):
         super(CarballTransformer, self).__init__()
 
         if num_heads is None:
@@ -15,10 +16,19 @@ class CarballTransformer(nn.Module):
         if ff_dim is None:
             ff_dim = dim * 4
 
+        self.game_columns = len(GameInfo) - 1
         self.ball_columns = len(BallData) - 1
         self.player_columns = len(PlayerData) - 1
         self.boost_columns = len(BoostData) - 1
 
+        if include_game_info:
+            self.game_embedding = nn.Sequential(
+                nn.Linear(self.game_columns, dim),
+                activation_fn(),
+                nn.Linear(dim, dim)
+            )
+        else:
+            self.game_embedding = None
         self.ball_embedding = nn.Sequential(
             nn.Linear(self.ball_columns, dim),
             activation_fn(),
@@ -45,40 +55,53 @@ class CarballTransformer(nn.Module):
 
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
 
-    def forward(self, ball_data, player_data, boost_data):
+    def forward(self, game_info, ball_data, player_data, boost_data):
         # Shapes:
+        # game_info: (batch_size, num_columns)
         # ball_data: (batch_size, num_balls, num_columns)
         # player_data: (batch_size, num_players, num_columns)
         # boost_data: (batch_size, num_boosts, num_columns)
 
+        if self.game_embedding is None or game_info is None:
+            game_info = torch.zeros((ball_data.shape[0], 0, self.game_columns), device=ball_data.device)
+        else:
+            game_info = game_info.unsqueeze(1)
         ignore_mask = torch.cat([
-            ball_data[:, :, BallData.IGNORE.value],
-            player_data[:, :, PlayerData.IGNORE.value],
-            boost_data[:, :, BoostData.IGNORE.value]
+            game_info[:, :, GameInfo.IGNORE],
+            ball_data[:, :, BallData.IGNORE],
+            player_data[:, :, PlayerData.IGNORE],
+            boost_data[:, :, BoostData.IGNORE]
         ], dim=1)
+        entities = []
+        if self.game_embedding is not None:
+            game_embedded = self.game_embedding(game_info[:, :, 1:])
+            entities.append(game_embedded)
         ball_embedded = self.ball_embedding(ball_data[:, :, 1:])
         player_embedded = self.player_embedding(player_data[:, :, 1:])
         boost_embedded = self.boost_embedding(boost_data[:, :, 1:])
 
-        entities = torch.cat([ball_embedded, player_embedded, boost_embedded], dim=1)
-        entities = self.encoder(entities, src_key_padding_mask=ignore_mask)
+        entities += [ball_embedded, player_embedded, boost_embedded]
+        entities_out = torch.cat(entities, dim=1)
+        entities_out = self.encoder(entities_out, src_key_padding_mask=ignore_mask)
 
-        ball_out = entities[:, :ball_data.shape[1]]
-        player_out = entities[:, ball_data.shape[1]:ball_data.shape[1] + player_data.shape[1]]
-        boost_out = entities[:, ball_data.shape[1] + player_data.shape[1]:]
+        results = torch.split(entities_out, [e.shape[1] for e in entities], dim=1)
 
-        return ball_out, player_out, boost_out
+        return results
 
 
 class NextGoalPredictor(nn.Module):
-    def __init__(self, transformer: CarballTransformer):
+    def __init__(self, transformer: CarballTransformer, include_ties=False):
         super(NextGoalPredictor, self).__init__()
 
         self.transformer = transformer
-        self.linear = nn.Linear(transformer.encoder.layers[-1].linear2.out_features, 1)
+        self.linear = nn.Linear(transformer.encoder.layers[-1].linear2.out_features, 2 + include_ties)
 
-    def forward(self, ball_data, player_data, boost_data):
-        ball_out, player_out, boost_out = self.transformer(ball_data, player_data, boost_data)
+    def forward(self, game_info, ball_data, player_data, boost_data):
+        out = self.transformer(game_info, ball_data, player_data, boost_data)
+        if len(out) == 4:
+            game_out, ball_out, player_out, boost_out = out
+        else:
+            ball_out, player_out, boost_out = out
         out = self.linear(ball_out)
         return out.squeeze((1, 2))
 
