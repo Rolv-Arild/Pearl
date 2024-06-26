@@ -2,6 +2,7 @@ import math
 import os
 import shutil
 from argparse import ArgumentParser
+from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
 from tqdm import tqdm
@@ -44,29 +45,31 @@ def main(args):
         # Note that we use ceil instead of floor, so we don't lose any data.
         # This means we will encounter shards that don't exist, which we will fill with dummy data.
         # The dummy data is removed later on
-        t = 0
-        while t < num_shards:
-            s = 0
-            while s < w:
-                a = s + t
-                b = a + w
-                pbar.set_postfix_str(f"Swapping {a} and {b} (t={t}, s={s})")
-                shard_a = load_episode_data(os.path.join(output_dir, f"tmp_shard_{a}.npz"), shard_size)
-                shard_b = load_episode_data(os.path.join(output_dir, f"tmp_shard_{b}.npz"), shard_size)
-                total_shard = shard_a + shard_b
-                total_shard.shuffle()
-                shard_a = total_shard[:len(total_shard) // 2]
-                shard_b = total_shard[len(total_shard) // 2:]
-                shard_a.save(os.path.join(output_dir, f"tmp_shard_{a}.npz"))
-                shard_b.save(os.path.join(output_dir, f"tmp_shard_{b}.npz"))
+        with ProcessPoolExecutor() as ex:
+            futures = []
+            t = 0
+            while t < num_shards:
+                s = 0
+                while s < w:
+                    a = s + t
+                    b = a + w
+                    pbar.set_postfix_str(f"Swapping {a} and {b} (t={t}, s={s})")
+                    path_a = os.path.join(output_dir, f"tmp_shard_{a}.npz")
+                    path_b = os.path.join(output_dir, f"tmp_shard_{b}.npz")
+                    # mix_shards(path_a, path_b, shard_size)
+                    future = ex.submit(mix_shards, path_a, path_b, shard_size)
+                    futures.append(future)
 
-                res: tuple = swapped[a] + swapped[b]
-                assert len(set(res)) == len(res), f"Duplicate shards in swap: {res}"
-                swapped[a] = res
-                swapped[b] = res
+                    res: tuple = swapped[a] + swapped[b]
+                    assert len(set(res)) == len(res), f"Duplicate shards in swap: {res}"
+                    swapped[a] = res
+                    swapped[b] = res
 
-                s += 1
-            t += 2 * w
+                    s += 1
+                t += 2 * w
+            pbar.set_postfix_str(f"Waiting for {len(futures)} futures")
+            for future in futures:
+                future.result()
         w *= 2
 
     # Remove dummy data
@@ -101,6 +104,17 @@ def main(args):
     print("Copying validation files")
     for n, file in enumerate(val_files):
         shutil.copy(file, os.path.join(output_dir, f"validation_shard_{n}.npz"))
+
+
+def mix_shards(path_a, path_b, shard_size):
+    shard_a = load_episode_data(path_a, shard_size)
+    shard_b = load_episode_data(path_b, shard_size)
+    total_shard = shard_a + shard_b
+    total_shard.shuffle()
+    shard_a = total_shard[:len(total_shard) // 2]
+    shard_b = total_shard[len(total_shard) // 2:]
+    shard_a.save(path_a)
+    shard_b.save(path_b)
 
 
 if __name__ == '__main__':
