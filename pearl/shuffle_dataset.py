@@ -27,9 +27,13 @@ def main(args):
     sizes = []
     pbar = tqdm(train_files, desc="Getting dataset size")
     for file in pbar:
-        shard = EpisodeData.load(file)
+        try:
+            shard = EpisodeData.load(file)
+        except Exception as e:
+            print(f"Error loading {file}: {e}")
+            raise e
         sizes.append(len(shard))
-        pbar.set_postfix_str(f"size={len(shard)}")
+        pbar.set_postfix_str(f"{file}, size={len(shard)}")
     total_samples = sum(sizes)
     print(f"Total samples: {total_samples}")
 
