@@ -89,7 +89,7 @@ def main(args):
         out_shard[i:i + len(shard)] = shard
         i += len(shard)
     if i > 0:
-        out_shard.save(os.path.join(output_dir, f"training_shard_{n}.npz"))
+        out_shard[:i].save(os.path.join(output_dir, f"training_shard_{n}.npz"))
 
     # Clean up any remaining intermediate files
     print("Cleaning up")
