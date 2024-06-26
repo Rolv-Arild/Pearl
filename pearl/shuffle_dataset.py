@@ -45,7 +45,7 @@ def main(args):
         # Note that we use ceil instead of floor, so we don't lose any data.
         # This means we will encounter shards that don't exist, which we will fill with dummy data.
         # The dummy data is removed later on
-        with ProcessPoolExecutor(32) as ex:
+        with ProcessPoolExecutor(16) as ex:
             futures = []
             t = 0
             while t < num_shards:
