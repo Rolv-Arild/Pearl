@@ -8,7 +8,7 @@ from torch.nn import CrossEntropyLoss
 from torch.optim import AdamW
 from tqdm import tqdm
 
-from pearl.data import EpisodeData, NO_TEAM
+from pearl.data import EpisodeData, NO_TEAM, GameInfo
 from pearl.metrics import Accuracy, AccuracyAtNSec, EpisodeUniqueness, NoMaskMetric, \
     CalibrationScore, PredictionVariance
 from pearl.model import NextGoalPredictor, CarballTransformer
@@ -151,7 +151,8 @@ class NGPTrainer:
         with torch.no_grad():
             for file in pbar:
                 shard: EpisodeData = EpisodeData.load(os.path.join(self.dataset_dir, file))
-                shard = shard[~np.isnan(shard.game_info)]  # TODO: Fix this in the data generation
+                # TODO: Fix this in the data generation
+                shard = shard[~np.isnan(shard.game_info[:, GameInfo.TIME_REMAINING])]
 
                 if self.augment:
                     shard.normalize_ball_quadrant()
@@ -208,7 +209,8 @@ class NGPTrainer:
                     # shard.mirror_x("random")
                 if self.mask is not None:
                     shard.mask_randomly(self.mask)
-                shard = shard[~np.isnan(shard.game_info)]  # TODO: Fix this in the data generation
+                # TODO: Fix this in the data generation
+                shard = shard[~np.isnan(shard.game_info[:, GameInfo.TIME_REMAINING])]
 
                 macro_batch_size = self.batch_size * self.gradient_accumulation_steps
                 for i in range(0, len(shard) - macro_batch_size, macro_batch_size):
