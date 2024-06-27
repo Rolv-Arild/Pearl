@@ -81,7 +81,7 @@ def main(args):
         if not shard_file.startswith("tmp_shard_"):
             continue
         shard = EpisodeData.load(os.path.join(output_dir, shard_file))
-        shard = shard[np.isnan(shard.game_info[:, GameInfo.IGNORE])]
+        shard = shard[~np.isnan(shard.game_info[:, GameInfo.IGNORE])]
         if i + len(shard) > shard_size:
             out_shard[i:] = shard[:shard_size - i]
             shard = shard[shard_size - i:]
@@ -91,6 +91,8 @@ def main(args):
             i = 0
         out_shard[i:i + len(shard)] = shard
         i += len(shard)
+        pbar.set_postfix_str(f"Shard {n}, frames {i:_}")
+        os.remove(os.path.join(output_dir, shard_file))
     if i > 0:
         out_shard[:i].save(os.path.join(output_dir, f"training_shard_{n}.npz"))
 
@@ -111,8 +113,9 @@ def mix_shards(path_a, path_b, shard_size):
     shard_b = load_episode_data(path_b, shard_size)
     total_shard = shard_a + shard_b
     total_shard.shuffle()
-    shard_a = total_shard[:len(total_shard) // 2]
-    shard_b = total_shard[len(total_shard) // 2:]
+    mid = len(total_shard) // 2
+    shard_a = total_shard[:mid]
+    shard_b = total_shard[mid:]
     shard_a.save(path_a)
     shard_b.save(path_b)
 
