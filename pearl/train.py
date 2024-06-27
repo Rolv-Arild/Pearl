@@ -39,8 +39,8 @@ class NGPTrainer:
         else:
             dim, num_layers, num_heads, ff_dim = (int(v) for v in size.split(","))
 
-        assert predict_win or not include_scoreboard, "Can't predict win without scoreboard"
-        assert include_ties or not include_scoreboard, "Can't include ties without scoreboard"
+        assert not predict_win or include_scoreboard, "Can't predict win without scoreboard"
+        assert not include_ties or include_scoreboard, "Can't include ties without scoreboard"
 
         self.include_scoreboard = include_scoreboard
         self.include_ties = include_ties
