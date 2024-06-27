@@ -153,9 +153,10 @@ class NGPTrainer:
                 shard: EpisodeData = EpisodeData.load(os.path.join(self.dataset_dir, file))
                 shard.game_info[np.isnan(shard.game_info)] = 0.0  # TODO: Fix this in the data generation
 
-                # if self.augment:
-                #     shard.swap_teams("random")
-                #     shard.mirror_x("random")
+                if self.augment:
+                    shard.normalize_ball_quadrant()
+                    # shard.swap_teams("random")
+                    # shard.mirror_x("random")
                 if self.mask is not None:
                     shard.mask_randomly(self.mask, rng=np.random.default_rng(123))
 
