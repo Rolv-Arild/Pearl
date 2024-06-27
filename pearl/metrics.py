@@ -66,7 +66,7 @@ class AccuracyAtNSec(BaseMetric):
         y_pred = y_pred[mask]
         mask = ((y_true == 0) | (y_true == 1))  # While these are torch
         y_true = y_true[mask]
-        y_pred = y_pred[mask]
+        y_pred = y_pred[mask][:, [0, 1]]
         self.correct += torch.sum(y_pred.argmax(dim=-1) == y_true).item()
         self.total += len(y_true)
 
@@ -112,7 +112,8 @@ class NormalizedBrierScore(BaseMetric):
     def submit(self, y_true: torch.Tensor, y_pred: torch.Tensor, episode_data: EpisodeData):
         mask = (y_true == 0) | (y_true == 1)
         y_true = y_true[mask]
-        y_pred = torch.softmax(y_pred[mask], dim=1)[:, 1]
+        y_pred = y_pred[mask][:, [0, 1]]
+        y_pred = torch.softmax(y_pred, dim=1)[:, 1]
         self.brier_score += torch.sum((y_pred - y_true) ** 2).item()
         self.total += len(y_true)
 
@@ -141,7 +142,7 @@ class CalibrationScore(BaseMetric):
 
     def submit(self, y_true: torch.Tensor, y_pred: torch.Tensor, episode_data: EpisodeData):
         has_goal = (y_true == 0) | (y_true == 1)
-        y_pred = torch.softmax(y_pred, dim=1)[:, 1]
+        y_pred = torch.softmax(y_pred[:, [0, 1]], dim=1)[:, 1]
         bin_edges = np.linspace(0, 1, self.bin_count + 1)
         i = 0
         for bin_start, bin_end in zip(bin_edges[:-1], bin_edges[1:]):
