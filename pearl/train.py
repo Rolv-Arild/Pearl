@@ -151,7 +151,7 @@ class NGPTrainer:
         with torch.no_grad():
             for file in pbar:
                 shard: EpisodeData = EpisodeData.load(os.path.join(self.dataset_dir, file))
-                shard.game_info[np.isnan(shard.game_info)] = 0.0  # TODO: Fix this in the data generation
+                shard = shard[~np.isnan(shard.game_info)]  # TODO: Fix this in the data generation
 
                 if self.augment:
                     shard.normalize_ball_quadrant()
@@ -208,7 +208,7 @@ class NGPTrainer:
                     # shard.mirror_x("random")
                 if self.mask is not None:
                     shard.mask_randomly(self.mask)
-                shard.game_info[np.isnan(shard.game_info)] = 0.0  # TODO: Fix this in the data generation
+                shard = shard[~np.isnan(shard.game_info)]  # TODO: Fix this in the data generation
 
                 macro_batch_size = self.batch_size * self.gradient_accumulation_steps
                 for i in range(0, len(shard) - macro_batch_size, macro_batch_size):
