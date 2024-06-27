@@ -63,6 +63,7 @@ class NGPTrainer:
                 ff_dim=ff_dim,
                 include_game_info=include_scoreboard
             ),
+            include_ties=include_ties,
         ).to(self.device)
         self.optimizer = AdamW(self.model.parameters(), lr=learning_rate)
         self.loss_fn = CrossEntropyLoss()
