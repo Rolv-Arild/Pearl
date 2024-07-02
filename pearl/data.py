@@ -215,10 +215,7 @@ class EpisodeData:
             self_val = getattr(self, attr)
             if isinstance(self_val, np.ndarray) and self_val.ndim > 0:
                 other_val = getattr(other, attr)
-                if attr == "episode_id":
-                    kwargs[attr] = np.concatenate((self_val, other_val + self_val[-1] + 1))
-                else:
-                    kwargs[attr] = np.concatenate((self_val, other_val))
+                kwargs[attr] = np.concatenate((self_val, other_val))
             else:
                 kwargs[attr] = self_val
 

@@ -10,7 +10,7 @@ from tqdm import tqdm
 from pearl.data import EpisodeData, GameInfo
 
 
-def load_episode_data(file, target_size):
+def load_episode_data(file, target_size=None):
     if os.path.isfile(file):
         return EpisodeData.load(file)
     dummy = EpisodeData.new_empty(target_size, normalized=True)
@@ -23,10 +23,13 @@ def main(args):
     output_dir = args.output_dir
     shard_size = args.shard_size
 
-    files = os.listdir(input_dir)  # Keep the last file as validation
-    files = [os.path.join(input_dir, file) for file in files if file.endswith(".npz")]
+    while True:
+        files = os.listdir(input_dir)
+        files = [os.path.join(input_dir, file) for file in files if file.endswith(".npz")]
+        if len(files) >= 240:
+            break
     train_files = files[:-1]
-    val_files = files[-1:]
+    val_files = files[-1:]  # Keep the last file as validation
 
     # Now, we need to make new shards with globally shuffled data.
     # We use a butterfly shuffle, so the complexity is O(n * log(n))
@@ -76,25 +79,25 @@ def main(args):
     n = 0
     i = 0
     out_shard = EpisodeData.new_empty(shard_size, normalized=True)
-    pbar = tqdm(os.listdir(output_dir), "Removing dummy data")
-    for shard_file in pbar:
-        if not shard_file.startswith("tmp_shard_"):
-            continue
-        shard = EpisodeData.load(os.path.join(output_dir, shard_file))
-        shard = shard[~np.isnan(shard.game_info[:, GameInfo.IGNORE])]
-        if i + len(shard) > shard_size:
-            out_shard[i:] = shard[:shard_size - i]
-            shard = shard[shard_size - i:]
-            out_shard.save(os.path.join(output_dir, f"training_shard_{n}.npz"))
-            n += 1
-            out_shard = EpisodeData.new_empty(shard_size, normalized=True)
-            i = 0
-        out_shard[i:i + len(shard)] = shard
-        i += len(shard)
-        pbar.set_postfix_str(f"Shard {n}, frames {i:_}")
-        os.remove(os.path.join(output_dir, shard_file))
-    if i > 0:
-        out_shard[:i].save(os.path.join(output_dir, f"training_shard_{n}.npz"))
+    files = [os.path.join(output_dir, shard_file) for shard_file in os.listdir(output_dir)
+             if not shard_file.startswith("tmp_shard_")]
+    with ProcessPoolExecutor(16) as ex:
+        pbar = tqdm(ex.map(load_episode_data, files), "Removing dummy data")
+        for shard, fpath in zip(pbar, files):
+            shard = shard[~np.isnan(shard.game_info[:, GameInfo.IGNORE])]
+            if i + len(shard) > shard_size:
+                out_shard[i:] = shard[:shard_size - i]
+                shard = shard[shard_size - i:]
+                out_shard.save(os.path.join(output_dir, f"training_shard_{n}.npz"))
+                n += 1
+                out_shard = EpisodeData.new_empty(shard_size, normalized=True)
+                i = 0
+            out_shard[i:i + len(shard)] = shard
+            i += len(shard)
+            pbar.set_postfix_str(f"Shard {n}, frames {i:_}")
+            os.remove(fpath)
+        if i > 0:
+            out_shard[:i].save(os.path.join(output_dir, f"training_shard_{n}.npz"))
 
     # Clean up any remaining intermediate files
     print("Cleaning up")

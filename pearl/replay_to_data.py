@@ -65,7 +65,7 @@ def populate_index(episode_data, i, replay_frame, include_interpolated_data=Fals
         age = replay_frame.update_age[car_id]
         episode_data.player_data[i, j, PlayerData.AGE] = age
         if age == 0 or include_interpolated_data:  # or i == episode_start_index:
-            episode_data.player_data[i, j, PlayerData.TEAM] = -1 if car.is_blue else 1
+            episode_data.player_data[i, j, PlayerData.TEAM] = -1 if car.is_blue else 1  # car.team_num
             episode_data.player_data[i, j, PLAYER_POS_COLS] = car.physics.position
             episode_data.player_data[i, j, PLAYER_VEL_COLS] = car.physics.linear_velocity
             episode_data.player_data[i, j, PLAYER_FW_COLS] = car.physics.forward
@@ -90,6 +90,11 @@ def populate_index(episode_data, i, replay_frame, include_interpolated_data=Fals
             episode_data.player_data[i, j, PlayerData.IS_AUTOFLIPPING] = car.is_autoflipping
             episode_data.player_data[i, j, PlayerData.AUTOFLIP_TIMER] = car.autoflip_timer
             episode_data.player_data[i, j, PlayerData.AUTOFLIP_DIRECTION] = car.autoflip_direction
+            # episode_data.player_data[i, j, PlayerData.IS_BOOSTING] = car.is_boosting
+            # episode_data.player_data[i, j, PlayerData.IS_SUPERSONIC] = car.is_supersonic
+            # episode_data.player_data[i, j, PlayerData.CAN_FLIP] = car.can_flip
+            # episode_data.player_data[i, j, PlayerData.IS_FLIPPING] = car.is_flipping
+            # episode_data.player_data[i, j, PlayerData.HAD_CAR_CONTACT] = car.had_car_contact
         else:
             episode_data.player_data[i, j, PlayerData.TEAM:] = episode_data.player_data[i - 1, j, PlayerData.TEAM:]
     episode_data.player_data[i, len(state.cars):, PlayerData.IGNORE] = 1

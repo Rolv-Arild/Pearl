@@ -39,7 +39,8 @@ def lr_plot(size, dataset_folder, batch_size=64, gradient_accumulation_steps=1, 
         shard.shuffle()
 
         macro_batch_size = batch_size * gradient_accumulation_steps
-        for i in range(0, len(shard) - macro_batch_size, macro_batch_size):
+        i = 0
+        while i < len(shard) - macro_batch_size:
             tot_loss = 0
             for _ in range(gradient_accumulation_steps):
                 batch = shard[i:i + batch_size]
