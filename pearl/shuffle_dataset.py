@@ -80,37 +80,37 @@ def main(args):
     i = 0
     out_shard = EpisodeData.new_empty(shard_size, normalized=True)
     files = [os.path.join(output_dir, shard_file) for shard_file in os.listdir(output_dir)
-             if not shard_file.startswith("tmp_shard_")]
-    # with ProcessPoolExecutor(16) as ex:
-    pbar = tqdm(files, "Removing dummy data")
-    for fpath in pbar:
-        shard = EpisodeData.load(fpath)
-        shard = shard[~np.isnan(shard.game_info[:, GameInfo.IGNORE])]
-        if i + len(shard) > shard_size:
-            out_shard[i:] = shard[:shard_size - i]
-            shard = shard[shard_size - i:]
-            out_shard.save(os.path.join(output_dir, f"training_shard_{n}.npz"))
-            n += 1
-            out_shard = EpisodeData.new_empty(shard_size, normalized=True)
-            i = 0
-        out_shard[i:i + len(shard)] = shard
-        i += len(shard)
-        pbar.set_postfix_str(f"Shard {n}, frames {i:_}")
-        os.remove(fpath)
-    if i > 0:
-        out_shard[:i].save(os.path.join(output_dir, f"training_shard_{n}.npz"))
+             if shard_file.startswith("tmp_shard_")]
+    with ProcessPoolExecutor(16) as ex:
+        pbar = tqdm(ex.map(load_episode_data, files), "Removing dummy data")
+        for shard, fpath in zip(pbar, files):
+            shard = shard[~np.isnan(shard.game_info[:, GameInfo.IGNORE])]
+            if i + len(shard) > shard_size:
+                out_shard[i:] = shard[:shard_size - i]
+                shard = shard[shard_size - i:]
+                out_shard.save(os.path.join(output_dir, f"training_shard_{n}.npz"))
+                n += 1
+                out_shard = EpisodeData.new_empty(shard_size, normalized=True)
+                i = 0
+            out_shard[i:i + len(shard)] = shard
+            i += len(shard)
+            pbar.set_postfix_str(f"Shard {n}, frames {i:_}")
+            os.remove(fpath)
+        if i > 0:
+            out_shard[:i].save(os.path.join(output_dir, f"training_shard_{n}.npz"))
 
+    # Clean up any remaining intermediate files
+    print("Cleaning up")
+    files = os.listdir(output_dir)
+    assert len(files) == len(train_files)
+    for shard_file in files:
+        if shard_file.startswith("tmp_shard_"):
+            os.remove(os.path.join(output_dir, shard_file))
 
-# Clean up any remaining intermediate files
-print("Cleaning up")
-for shard_file in os.listdir(output_dir):
-    if shard_file.startswith("tmp_shard_"):
-        os.remove(os.path.join(output_dir, shard_file))
-
-# Copy validation files
-print("Copying validation files")
-for n, file in enumerate(val_files):
-    shutil.copy(file, os.path.join(output_dir, f"validation_shard_{n}.npz"))
+    # Copy validation files
+    print("Copying validation files")
+    for n, file in enumerate(val_files):
+        shutil.copy(file, os.path.join(output_dir, f"validation_shard_{n}.npz"))
 
 
 def mix_shards(path_a, path_b, shard_size):
