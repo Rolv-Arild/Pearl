@@ -96,7 +96,7 @@ def main(args):
         out_shard[i:i + len(shard)] = shard
         i += len(shard)
         pbar.set_postfix_str(f"Shard {n}, frames {i:_}")
-        os.remove(fpath)
+        # os.remove(fpath)
     if i > 0:
         out_shard[:i].save(os.path.join(output_dir, f"training_shard_{n}.npz"))
 
