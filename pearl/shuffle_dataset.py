@@ -102,7 +102,6 @@ def main(args):
     # Clean up any remaining intermediate files
     print("Cleaning up")
     files = os.listdir(output_dir)
-    assert len(files) == len(train_files)
     for shard_file in files:
         if shard_file.startswith("tmp_shard_"):
             os.remove(os.path.join(output_dir, shard_file))
