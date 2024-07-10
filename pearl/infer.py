@@ -13,6 +13,7 @@ from pearl.model import NextGoalPredictor, CarballTransformer
 from pearl.replay import ParsedReplay
 from pearl.replay_to_data import replay_to_data
 from pearl.shapley import shapley_value
+from pearl.train import SIZES
 
 
 def powerset(iterable):
@@ -30,13 +31,15 @@ def main(args):
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
     include_ties = args.include_ties
 
+    dim, num_layers, num_heads, ff_dim = SIZES["mini"]
+
     model = NextGoalPredictor(
         CarballTransformer(
-            dim=256,
-            num_layers=4,
-            num_heads=4,
-            ff_dim=1024,
-            include_game_info=False
+            dim=dim,
+            num_layers=num_layers,
+            num_heads=num_layers,
+            ff_dim=ff_dim,
+            include_game_info=True
         ),
         include_ties=include_ties,
     )
@@ -84,7 +87,13 @@ def main(args):
 
                 starts_ends.append((start_frame, end_frame))
 
-            episodes = replay_to_data(parsed_replay, ignore_unfinished=False)
+            try:
+                episodes = replay_to_data(parsed_replay, normalize=True, ignore_unfinished=False)
+            except Exception as err:
+                print(f"Failed to load {replay_path}: {err}")
+                continue
+            original = episodes.clone()
+            episodes.normalize_ball_quadrant()
             predictions = []
             for i in range(0, len(episodes), batch_size):
                 batch = episodes[i:i + batch_size]
@@ -92,7 +101,10 @@ def main(args):
                 y_hat = model(*x)
                 predictions.append(y_hat)
             predictions = torch.cat(predictions).cpu().numpy()
-            episodes.save(out_path + "_episodes.npz")
+            inverted = episodes.is_xy_flipped[:, 1]
+            # Swap blue and orange prediction where inverted
+            predictions[inverted] = predictions[inverted][:, [1, 0, 2]]
+            original.save(out_path + "_episodes.npz")
             np.save(out_path + "_predictions.npy", predictions)
 
 
